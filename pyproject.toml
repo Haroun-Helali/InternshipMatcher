@@ -51,6 +51,9 @@ addopts = [
     "--cov-report=term-missing",
 ]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (require external services)",
+]
 
 [tool.black]
 line-length = 100
