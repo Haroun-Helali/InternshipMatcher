@@ -41,6 +41,13 @@ class VectorStoreError(RAGApplicationError):
         super().__init__(message, details, status_code=500)
 
 
+class RAGPipelineError(RAGApplicationError):
+    """Raised when RAG pipeline execution fails."""
+    
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, details, status_code=500)
+
+
 class LLMError(RAGApplicationError):
     """Raised when LLM operations fail."""
     

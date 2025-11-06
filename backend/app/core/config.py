@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # RAG
     chunk_size: int = 500
     chunk_overlap: int = 50
-    top_k_results: int = 5
+    rag_top_k_results: int = 5
     max_context_length: int = 2000
     
     # Documents
