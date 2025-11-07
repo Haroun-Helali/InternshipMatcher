@@ -62,9 +62,10 @@ def create_application() -> FastAPI:
             "environment": settings.environment
         }
     
-    # TODO: Register API routers in future phases
-    # from backend.app.api import documents, query, resume, match
-    # app.include_router(documents.router, prefix=settings.api_v1_prefix)
+    # Register API routers
+    from backend.app.api import documents, query
+    app.include_router(documents.router, prefix=settings.api_v1_prefix)
+    app.include_router(query.router, prefix=settings.api_v1_prefix)
     
     return app
 

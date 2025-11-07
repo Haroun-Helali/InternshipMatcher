@@ -9,6 +9,7 @@ export interface Document {
   status: 'processing' | 'embedded' | 'error';
   created_at: string;
   file_name: string;
+  chunks_count?: number;
 }
 
 export interface Message {
@@ -17,6 +18,13 @@ export interface Message {
   content: string;
   timestamp: Date;
   citations?: string[];
+  sources?: Array<{
+    document_id: string;
+    filename: string;
+    chunk_index: number;
+    content: string;
+    similarity_score: number;
+  }>;
 }
 
 export interface Profile {
@@ -39,11 +47,17 @@ interface AppContextType {
   documents: Document[];
   addDocument: (doc: Document) => void;
   removeDocument: (id: string) => void;
+  updateDocument: (id: string, updates: Partial<Document>) => void;
   
   // Messages
   messages: Message[];
   addMessage: (message: Message) => void;
+  updateMessage: (id: string, updates: Partial<Message>) => void;
   clearMessages: () => void;
+  
+  // Session
+  sessionId: string;
+  generateNewSession: () => void;
   
   // Profile
   profile: Profile | null;
@@ -69,6 +83,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [darkMode, setDarkMode] = useState(false);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [sessionId, setSessionId] = useState<string>(() => {
+    // Generate initial session ID
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  });
 
   const addDocument = (doc: Document) => {
     setDocuments((prev) => [...prev, doc]);
@@ -78,12 +96,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDocuments((prev) => prev.filter((doc) => doc.id !== id));
   };
 
+  const updateDocument = (id: string, updates: Partial<Document>) => {
+    setDocuments((prev) =>
+      prev.map((doc) => (doc.id === id ? { ...doc, ...updates } : doc))
+    );
+  };
+
   const addMessage = (message: Message) => {
     setMessages((prev) => [...prev, message]);
   };
 
+  const updateMessage = (id: string, updates: Partial<Message>) => {
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === id ? { ...msg, ...updates } : msg))
+    );
+  };
+
   const clearMessages = () => {
     setMessages([]);
+  };
+
+  const generateNewSession = () => {
+    setSessionId(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   };
 
   const toggleDarkMode = () => {
@@ -100,9 +134,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         documents,
         addDocument,
         removeDocument,
+        updateDocument,
         messages,
         addMessage,
+        updateMessage,
         clearMessages,
+        sessionId,
+        generateNewSession,
         profile,
         setProfile,
         matches,

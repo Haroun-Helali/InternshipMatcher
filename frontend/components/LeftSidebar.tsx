@@ -1,33 +1,72 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useApp } from '@/contexts/AppContext';
 import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { documentsApi } from '@/lib/api';
 
 export default function LeftSidebar() {
-  const { documents, addDocument, removeDocument, darkMode } = useApp();
+  const { documents, addDocument, removeDocument, updateDocument, darkMode } = useApp();
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    acceptedFiles.forEach((file) => {
+  // Load existing documents on mount
+  useEffect(() => {
+    loadDocuments();
+  }, []);
+
+  const loadDocuments = async () => {
+    try {
+      const docs = await documentsApi.list();
+      docs.forEach((doc) => {
+        addDocument({
+          id: doc.document_id,
+          title: doc.filename,
+          status: 'embedded',
+          created_at: new Date().toISOString(),
+          file_name: doc.filename,
+          chunks_count: doc.chunks_count,
+        });
+      });
+    } catch (error) {
+      console.error('Failed to load documents:', error);
+    }
+  };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    setUploadError(null);
+
+    for (const file of acceptedFiles) {
+      const tempId = Math.random().toString(36).substr(2, 9);
       const newDoc = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: tempId,
         title: file.name,
         status: 'processing' as const,
         created_at: new Date().toISOString(),
         file_name: file.name,
       };
       addDocument(newDoc);
-      
-      // Simulate processing
-      setTimeout(() => {
-        addDocument({
-          ...newDoc,
-          status: 'embedded' as const,
+
+      try {
+        // Upload to backend
+        const response = await documentsApi.upload(file);
+        
+        // Update with success
+        updateDocument(tempId, {
+          id: response.document_id,
+          status: 'embedded',
+          chunks_count: response.chunks_count,
         });
-      }, 2000);
-    });
-  }, [addDocument]);
+      } catch (error) {
+        // Update with error
+        updateDocument(tempId, {
+          status: 'error',
+        });
+        setUploadError(error instanceof Error ? error.message : 'Upload failed');
+        console.error('Failed to upload document:', error);
+      }
+    }
+  }, [addDocument, updateDocument]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -50,6 +89,16 @@ export default function LeftSidebar() {
     }
   };
 
+  const handleDelete = async (doc: any) => {
+    try {
+      await documentsApi.delete(doc.id);
+      removeDocument(doc.id);
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  };
+
   return (
     <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
       {/* Header */}
@@ -64,6 +113,11 @@ export default function LeftSidebar() {
 
       {/* Upload Area */}
       <div className="p-4">
+        {uploadError && (
+          <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+          </div>
+        )}
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
@@ -121,7 +175,7 @@ export default function LeftSidebar() {
                   </div>
                   
                   <button
-                    onClick={() => removeDocument(doc.id)}
+                    onClick={() => handleDelete(doc)}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-opacity"
                     aria-label="Delete document"
                   >

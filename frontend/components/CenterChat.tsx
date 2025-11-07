@@ -2,14 +2,17 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Send, User, Bot } from 'lucide-react';
+import { Send, User, Bot, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { queryApi, type SourceReference } from '@/lib/api';
 
 export default function CenterChat() {
-  const { messages, addMessage, darkMode } = useApp();
+  const { messages, addMessage, updateMessage, sessionId, darkMode } = useApp();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentStreamingId, setCurrentStreamingId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -19,8 +22,17 @@ export default function CenterChat() {
     scrollToBottom();
   }, [messages]);
 
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage = {
       id: Math.random().toString(36).substr(2, 9),
@@ -33,18 +45,59 @@ export default function CenterChat() {
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage = {
-        id: Math.random().toString(36).substr(2, 9),
-        role: 'assistant' as const,
-        content: `I understand you're asking about "${input}". Here's what I found based on the uploaded documents:\n\n**Key Points:**\n- This is a simulated response\n- The backend RAG pipeline will provide real answers\n- Integration with FastAPI endpoints coming soon\n\n**Citations:** [Document 1], [Document 2]`,
-        timestamp: new Date(),
-        citations: ['Document 1', 'Document 2'],
-      };
-      addMessage(aiMessage);
+    // Create assistant message with empty content for streaming
+    const assistantId = Math.random().toString(36).substr(2, 9);
+    const assistantMessage = {
+      id: assistantId,
+      role: 'assistant' as const,
+      content: '',
+      timestamp: new Date(),
+      sources: [] as SourceReference[],
+    };
+    
+    addMessage(assistantMessage);
+    setCurrentStreamingId(assistantId);
+
+    try {
+      // Use WebSocket for streaming response
+      let currentContent = '';
+      
+      wsRef.current = queryApi.createStreamConnection(
+        userMessage.content,
+        sessionId,
+        // On chunk received
+        (chunk: string) => {
+          currentContent += chunk;
+          updateMessage(assistantId, {
+            content: currentContent,
+          });
+        },
+        // On complete with sources
+        (sources: SourceReference[]) => {
+          updateMessage(assistantId, {
+            sources,
+            citations: sources.map((s) => s.filename),
+          });
+          setIsLoading(false);
+          setCurrentStreamingId(null);
+        },
+        // On error
+        (error: string) => {
+          updateMessage(assistantId, {
+            content: `Error: ${error}`,
+          });
+          setIsLoading(false);
+          setCurrentStreamingId(null);
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send query:', error);
+      updateMessage(assistantId, {
+        content: `Error: Failed to process your query. Please make sure the backend is running.`,
+      });
       setIsLoading(false);
-    }, 1500);
+      setCurrentStreamingId(null);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -139,14 +192,15 @@ export default function CenterChat() {
                     
                     {message.citations && message.citations.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-                        <p className="text-xs font-semibold mb-1 opacity-75">Citations:</p>
+                        <p className="text-xs font-semibold mb-1 opacity-75">Sources:</p>
                         <div className="flex flex-wrap gap-1">
                           {message.citations.map((citation, idx) => (
                             <span
                               key={idx}
-                              className="text-xs px-2 py-1 bg-white/10 rounded"
+                              className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 cursor-pointer transition-colors"
+                              title={message.sources?.[idx]?.content || citation}
                             >
-                              {citation}
+                              📄 {citation}
                             </span>
                           ))}
                         </div>
@@ -164,10 +218,11 @@ export default function CenterChat() {
                     <Bot className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                   </div>
                   <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
-                    <div className="flex space-x-2">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        Searching knowledge base...
+                      </span>
                     </div>
                   </div>
                 </div>
