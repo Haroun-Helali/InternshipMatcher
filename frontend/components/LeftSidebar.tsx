@@ -9,6 +9,7 @@ import { documentsApi } from '@/lib/api';
 export default function LeftSidebar() {
   const { documents, addDocument, removeDocument, updateDocument, darkMode } = useApp();
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   // Load existing documents on mount
   useEffect(() => {
@@ -35,8 +36,12 @@ export default function LeftSidebar() {
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     setUploadError(null);
+    setUploadProgress(null);
 
     for (const file of acceptedFiles) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      setUploadProgress(`Uploading ${file.name} (${fileSizeMB} MB)...`);
+      
       const tempId = Math.random().toString(36).substr(2, 9);
       const newDoc = {
         id: tempId,
@@ -50,25 +55,25 @@ export default function LeftSidebar() {
       try {
         // Upload to backend
         const response = await documentsApi.upload(file);
-
+        
         // Update with success
         updateDocument(tempId, {
           id: response.document_id,
           status: 'embedded',
           chunks_count: response.chunks_count,
         });
+        setUploadProgress(null);
       } catch (error) {
         // Update with error
         updateDocument(tempId, {
           status: 'error',
         });
         setUploadError(error instanceof Error ? error.message : 'Upload failed');
+        setUploadProgress(null);
         console.error('Failed to upload document:', error);
       }
     }
-  }, [addDocument, updateDocument]);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  }, [addDocument, updateDocument]);  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
@@ -116,6 +121,11 @@ export default function LeftSidebar() {
         {uploadError && (
           <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
             <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+          </div>
+        )}
+        {uploadProgress && (
+          <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <p className="text-sm text-blue-600 dark:text-blue-400">{uploadProgress}</p>
           </div>
         )}
         <div

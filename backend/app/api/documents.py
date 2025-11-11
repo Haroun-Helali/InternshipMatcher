@@ -118,18 +118,14 @@ async def upload_document(
             detail="Only PDF files are supported"
         )
     
-    # Validate file size
-    max_size = settings.max_file_size_bytes
-    content = await file.read()
-    if len(content) > max_size:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File size exceeds maximum allowed size of {settings.max_file_size_mb}MB"
-        )
-    
     try:
         # Generate unique document ID
         document_id = str(uuid.uuid4())
+        
+        # Read file content
+        content = await file.read()
+        
+        logger.info(f"Uploading file: {file.filename} ({len(content)} bytes)")
         
         # Save uploaded file temporarily
         upload_dir = Path(settings.upload_dir)
