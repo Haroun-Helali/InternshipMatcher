@@ -70,7 +70,7 @@ async def process_document_background(
             "file_size": processed_doc.metadata.file_size,
             "page_count": processed_doc.metadata.page_count,
             "document_type": processed_doc.metadata.document_type,
-            "created_at": processed_doc.metadata.created_at,
+            "created_at": processed_doc.metadata.upload_date.isoformat(),
             "chunk_count": len(processed_doc.chunks),
         }
         
