@@ -50,7 +50,7 @@ export default function LeftSidebar() {
       try {
         // Upload to backend
         const response = await documentsApi.upload(file);
-        
+
         // Update with success
         updateDocument(tempId, {
           id: response.document_id,
@@ -120,11 +120,10 @@ export default function LeftSidebar() {
         )}
         <div
           {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-            isDragActive
+          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragActive
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
               : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
-          }`}
+            }`}
         >
           <input {...getInputProps()} />
           <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400 dark:text-gray-500" />
@@ -145,7 +144,7 @@ export default function LeftSidebar() {
         <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
           Uploaded ({documents.length})
         </h3>
-        
+
         {documents.length === 0 ? (
           <div className="text-center py-8">
             <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
@@ -173,7 +172,7 @@ export default function LeftSidebar() {
                       <span className="capitalize">{doc.status}</span>
                     </div>
                   </div>
-                  
+
                   <button
                     onClick={() => handleDelete(doc)}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-opacity"

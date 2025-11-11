@@ -78,6 +78,9 @@ class RAGPipeline:
 
         # Conversation history (session_id -> turns)
         self.conversations: Dict[str, List[ConversationTurn]] = {}
+        
+        # Store last retrieved sources for access after streaming
+        self.last_retrieved_sources: List[Dict] = []
 
         logger.info(
             "RAG Pipeline initialized",
@@ -236,6 +239,9 @@ class RAGPipeline:
             results = self.vector_store.similarity_search(
                 query_embedding=query_embedding, top_k=top_k, filter_metadata=filters
             )
+            
+            # Store sources for later retrieval
+            self.last_retrieved_sources = results
 
             if not results:
                 yield self.prompt_templates.build_no_context_prompt(question)

@@ -15,7 +15,6 @@ from backend.app.models.api import (
 )
 from backend.app.core.exceptions import RAGPipelineError
 from backend.app.services.rag_pipeline import create_rag_pipeline
-from backend.app.services.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/query", tags=["query"])
@@ -137,23 +136,18 @@ async def query_stream(websocket: WebSocket):
                 
                 # Get sources from the last query
                 try:
-                    # Retrieve sources from vector store
-                    vector_store = VectorStore()
-                    results = vector_store.similarity_search(
-                        query=question,
-                        k=top_k,
-                        filters=filters
-                    )
+                    # Retrieve sources from RAG pipeline (already fetched during streaming)
+                    results = rag_pipeline.last_retrieved_sources
                     
                     sources = [
                         {
-                            "document_id": doc.metadata.get("document_id", "unknown"),
-                            "filename": doc.metadata.get("filename", "unknown"),
-                            "chunk_index": doc.metadata.get("chunk_index", 0),
-                            "content": doc.page_content,
-                            "similarity_score": doc.metadata.get("similarity_score", 0.0)
+                            "document_id": result["metadata"].get("document_id", "unknown"),
+                            "filename": result["metadata"].get("filename", "unknown"),
+                            "chunk_index": result["metadata"].get("chunk_index", 0),
+                            "content": result["content"],
+                            "similarity_score": 1.0 - result.get("distance", 0.0)  # Convert distance to similarity
                         }
-                        for doc in results
+                        for result in results
                     ]
                 except Exception as e:
                     logger.error(f"Failed to retrieve sources: {e}")

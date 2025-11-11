@@ -172,7 +172,7 @@ export const queryApi = {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === 'chunk') {
           onChunk(data.content);
         } else if (data.type === 'sources') {

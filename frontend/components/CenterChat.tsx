@@ -54,14 +54,14 @@ export default function CenterChat() {
       timestamp: new Date(),
       sources: [] as SourceReference[],
     };
-    
+
     addMessage(assistantMessage);
     setCurrentStreamingId(assistantId);
 
     try {
       // Use WebSocket for streaming response
       let currentContent = '';
-      
+
       wsRef.current = queryApi.createStreamConnection(
         userMessage.content,
         sessionId,
@@ -157,16 +157,14 @@ export default function CenterChat() {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`flex max-w-[80%] ${
-                    message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                  }`}
+                  className={`flex max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                    }`}
                 >
                   <div
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                      message.role === 'user'
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'user'
                         ? 'bg-blue-600 ml-3'
                         : 'bg-gray-200 dark:bg-gray-700 mr-3'
-                    }`}
+                      }`}
                   >
                     {message.role === 'user' ? (
                       <User className="w-5 h-5 text-white" />
@@ -174,13 +172,12 @@ export default function CenterChat() {
                       <Bot className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                     )}
                   </div>
-                  
+
                   <div
-                    className={`rounded-lg p-4 ${
-                      message.role === 'user'
+                    className={`rounded-lg p-4 ${message.role === 'user'
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                    }`}
+                      }`}
                   >
                     <div className="prose prose-sm max-w-none dark:prose-invert">
                       {message.role === 'user' ? (
@@ -189,7 +186,7 @@ export default function CenterChat() {
                         <ReactMarkdown>{message.content}</ReactMarkdown>
                       )}
                     </div>
-                    
+
                     {message.citations && message.citations.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                         <p className="text-xs font-semibold mb-1 opacity-75">Sources:</p>
@@ -210,7 +207,7 @@ export default function CenterChat() {
                 </div>
               </div>
             ))}
-            
+
             {isLoading && (
               <div className="flex justify-start">
                 <div className="flex">
@@ -228,7 +225,7 @@ export default function CenterChat() {
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </>
         )}

@@ -48,25 +48,25 @@ interface AppContextType {
   addDocument: (doc: Document) => void;
   removeDocument: (id: string) => void;
   updateDocument: (id: string, updates: Partial<Document>) => void;
-  
+
   // Messages
   messages: Message[];
   addMessage: (message: Message) => void;
   updateMessage: (id: string, updates: Partial<Message>) => void;
   clearMessages: () => void;
-  
+
   // Session
   sessionId: string;
   generateNewSession: () => void;
-  
+
   // Profile
   profile: Profile | null;
   setProfile: (profile: Profile | null) => void;
-  
+
   // Matches
   matches: Match[];
   setMatches: (matches: Match[]) => void;
-  
+
   // UI State
   darkMode: boolean;
   toggleDarkMode: () => void;
