@@ -41,7 +41,7 @@ export default function LeftSidebar() {
     for (const file of acceptedFiles) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       setUploadProgress(`Uploading ${file.name} (${fileSizeMB} MB)...`);
-      
+
       const tempId = Math.random().toString(36).substr(2, 9);
       const newDoc = {
         id: tempId,
@@ -55,7 +55,7 @@ export default function LeftSidebar() {
       try {
         // Upload to backend
         const response = await documentsApi.upload(file);
-        
+
         // Update with success
         updateDocument(tempId, {
           id: response.document_id,
@@ -73,7 +73,7 @@ export default function LeftSidebar() {
         console.error('Failed to upload document:', error);
       }
     }
-  }, [addDocument, updateDocument]);  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  }, [addDocument, updateDocument]); const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
@@ -131,8 +131,8 @@ export default function LeftSidebar() {
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragActive
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-              : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
+            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+            : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
             }`}
         >
           <input {...getInputProps()} />
