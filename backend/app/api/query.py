@@ -181,8 +181,9 @@ async def query_stream(websocket: WebSocket):
         logger.info("WebSocket connection closed")
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
-    finally:
-        await rag_pipeline.close()
+    # Do not close the shared RAG pipeline here; it's a module-level singleton
+    # and should live for the app lifetime. Closing it causes subsequent
+    # requests to fail with "client has been closed" errors.
 
 
 @router.get("/history/{session_id}", response_model=ConversationHistoryResponse)

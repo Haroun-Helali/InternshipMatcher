@@ -82,9 +82,10 @@ async def process_document_background(
         logger.error(f"Background processing failed for {filename}: {e}", exc_info=True)
         # In production, update task status in database
     finally:
-        # Cleanup temporary file
-        if file_path.exists():
-            file_path.unlink()
+        # Keep uploaded file so users can open original PDF later
+        # (served via /files). If storage must be reclaimed, implement
+        # a separate retention policy or cleanup job.
+        pass
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)

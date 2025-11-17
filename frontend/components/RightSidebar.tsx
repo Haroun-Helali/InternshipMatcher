@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Briefcase, Star, TrendingUp, MapPin, Calendar, X, ChevronRight } from 'lucide-react';
+import { Briefcase, Star, FileText, X, ChevronRight, ExternalLink } from 'lucide-react';
+import { QueryResponse } from '@/lib/api';
 
 export default function RightSidebar() {
   const { matches, rightSidebarOpen, toggleRightSidebar, darkMode, setMatches } = useApp();
@@ -26,19 +27,30 @@ export default function RightSidebar() {
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Match Results
+            Latest Results
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Top internship matches
+            Sources from the last answer
           </p>
         </div>
-        <button
-          onClick={toggleRightSidebar}
-          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-          aria-label="Close sidebar"
-        >
-          <X className="w-5 h-5 text-gray-500" />
-        </button>
+        <div className="flex items-center gap-2">
+          {matches.length > 0 && (
+            <button
+              onClick={() => setMatches([])}
+              className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              aria-label="Clear results"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            onClick={toggleRightSidebar}
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+            aria-label="Close sidebar"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
       </div>
 
       {/* Matches List */}
@@ -47,10 +59,10 @@ export default function RightSidebar() {
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Briefcase className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" />
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              No matches yet
+              No results yet
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Upload your resume to find matching internships
+              Ask a question to see related sources
             </p>
           </div>
         ) : (
@@ -139,8 +151,22 @@ export default function RightSidebar() {
                       </div>
                     </div>
 
-                    <button className="mt-3 w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                      View Full Details
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace('/api/v1','');
+                        if (match.documentId && match.filename) {
+                          const safeName = encodeURIComponent(`${match.documentId}_${match.filename}`);
+                          const url = `${base}/files/${safeName}`;
+                          window.open(url, '_blank');
+                        } else {
+                          const hint = `${match.position || 'Document'}${typeof match.chunkIndex === 'number' ? `, chunk ${match.chunkIndex + 1}` : ''}`;
+                          alert(`Original PDF not available to open automatically. Please look for: ${hint}`);
+                        }
+                      }}
+                      className="mt-3 w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" /> View Full Details
                     </button>
                   </div>
                 )}

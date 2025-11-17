@@ -40,6 +40,9 @@ export interface Match {
   matchScore: number;
   matchingSkills: string[];
   description: string;
+  documentId?: string;
+  filename?: string;
+  chunkIndex?: number;
 }
 
 interface AppContextType {

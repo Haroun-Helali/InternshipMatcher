@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from PyPDF2 import PdfReader
 
 from backend.app.core.config import get_settings

@@ -1,0 +1,41 @@
+Date: 2025-11-15
+
+Summary of updates and fixes
+
+Backend
+- Python env: Standardized on Python 3.11 with venv; updated setup flow.
+- Dependencies: Resolved Windows-native build issues; pinned numpy==1.26.4; removed conflicting langchain packages; added langchain-text-splitters.
+- Chroma: Reset persisted DB to resolve schema mismatch; vector store stable.
+- Ollama: Verified service and models; integrated robust connection handling.
+- Streaming fix: Avoid closing shared httpx AsyncClient; fixed "client has been closed" error in WebSocket streaming.
+- Static files: Mounted /files to serve uploaded PDFs; retained uploads for linking.
+- Prompts: Enhanced SYSTEM_PROMPT to include a minimal JSON matches summary at the end of answers for UI parsing.
+
+API/Services
+- RAG pipeline: Streams tokens, exposes sources; records last retrieved sources for post-stream packaging.
+- Query WS: Sends {type:start|chunk|sources|done}; sources include document_id, filename, chunk_index, content, similarity_score.
+- Documents: Background processing generates embeddings and indexes chunks; preserved original uploads.
+
+Frontend (Next.js)
+- CenterChat: Added WebSocket streaming; parses and strips JSON matches block from visible answer; falls back to source-based mapping if JSON missing; displays citations.
+- RightSidebar: Shows latest results with accurate title, company, match %, skills; added Clear button; "View Full Details" opens the actual PDF via /files or shows a helpful hint if unavailable.
+
+Developer Experience
+- Consolidated startup: Replaced setup.ps1, start-backend.ps1, start-frontend.ps1 with a single start.ps1.
+- start.ps1 supports tasks: install | backend | frontend | all. It creates venv, installs backend deps, ensures Ollama, installs frontend deps, and launches both services in separate windows.
+
+Usage
+- Initial install + run both:
+  powershell -ExecutionPolicy Bypass -File .\start.ps1 -Task all
+- Only install deps:
+  powershell -ExecutionPolicy Bypass -File .\start.ps1 -Task install
+- Only backend:
+  powershell -ExecutionPolicy Bypass -File .\start.ps1 -Task backend
+- Only frontend:
+  powershell -ExecutionPolicy Bypass -File .\start.ps1 -Task frontend
+
+Notes
+- Ollama: If not reachable, the script attempts to start it (ollama serve). If that fails, start manually.
+- Models: Ensure your chosen LLM (e.g., llama3.2:latest) and embedding model (e.g., mxbai-embed-large:latest) are installed in Ollama.
+- PDFs: Uploaded files are preserved under ./uploads and served at /files for deep links from the UI.
+- JSON in chat: The assistant appends a JSON summary of matches to improve the sidebar; the chat UI strips it from display.

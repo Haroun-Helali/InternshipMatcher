@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.core import get_logger, get_settings, setup_logging
 
@@ -66,6 +67,13 @@ def create_application() -> FastAPI:
     from backend.app.api import documents, query
     app.include_router(documents.router, prefix=settings.api_v1_prefix)
     app.include_router(query.router, prefix=settings.api_v1_prefix)
+
+    # Serve uploaded files statically for reference
+    try:
+        app.mount("/files", StaticFiles(directory=settings.upload_dir), name="files")
+        logger.info(f"Mounted static files at /files from {settings.upload_dir}")
+    except Exception as e:
+        logger.error(f"Failed to mount static files: {e}")
     
     return app
 

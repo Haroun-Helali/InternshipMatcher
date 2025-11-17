@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import { queryApi, type SourceReference } from '@/lib/api';
 
 export default function CenterChat() {
-  const { messages, addMessage, updateMessage, sessionId, darkMode } = useApp();
+  const { messages, addMessage, updateMessage, sessionId, darkMode, setMatches } = useApp();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentStreamingId, setCurrentStreamingId] = useState<string | null>(null);
@@ -30,6 +30,101 @@ export default function CenterChat() {
       }
     };
   }, []);
+
+  const extractMatchesFromAnswer = (answer: string) => {
+    try {
+      // First try fenced JSON block
+      const codeBlockRegex = /```json\s*([\s\S]*?)```/i;
+      let jsonText: string | null = null;
+      const fenced = answer.match(codeBlockRegex);
+      if (fenced) {
+        jsonText = fenced[1];
+      } else {
+        // Fallback: try to locate a raw JSON object containing "matches"
+        const startIdx = answer.lastIndexOf('{');
+        const matchesKeyIdx = answer.toLowerCase().lastIndexOf('"matches"');
+        if (matchesKeyIdx !== -1) {
+          // Walk backward to the preceding '{'
+          let i = matchesKeyIdx;
+          while (i >= 0 && answer[i] !== '{') i--;
+          if (i >= 0) {
+            // Balance braces to find the end
+            let depth = 0;
+            let end = -1;
+            for (let j = i; j < answer.length; j++) {
+              const ch = answer[j];
+              if (ch === '{') depth++;
+              else if (ch === '}') {
+                depth--;
+                if (depth === 0) {
+                  end = j;
+                  break;
+                }
+              }
+            }
+            if (end !== -1) {
+              jsonText = answer.slice(i, end + 1);
+            }
+          }
+        }
+      }
+
+      if (!jsonText) return null;
+
+      const data = JSON.parse(jsonText);
+      if (!data || !Array.isArray(data.matches)) return null;
+      return data.matches
+        .filter((m: any) => m && (m.title || m.company))
+        .map((m: any, idx: number) => ({
+          id: `${m.document_id || 'doc'}-${idx}`,
+          company: m.title || 'Opportunity',
+          position: m.company || 'Internship',
+          matchScore: Math.max(0, Math.min(100, Math.round(Number(m.score) || 0))),
+          matchingSkills: Array.isArray(m.requirements) ? m.requirements.map((s: any) => String(s)).slice(0, 10) : [],
+          description: `${(m.requirements || []).join(', ')}`.slice(0, 240),
+          documentId: m.document_id,
+          filename: m.source_file,
+        }));
+    } catch (e) {
+      console.error('Failed to parse matches JSON from answer:', e);
+      return null;
+    }
+  };
+
+  const stripMatchesJson = (answer: string) => {
+    try {
+      // Remove fenced JSON block if present
+      const fencedRegex = /```json[\s\S]*?```/i;
+      if (fencedRegex.test(answer)) {
+        return answer.replace(fencedRegex, '').trim();
+      }
+      // Remove raw JSON object containing "matches" if present
+      const lower = answer.toLowerCase();
+      const matchesKeyIdx = lower.lastIndexOf('"matches"');
+      if (matchesKeyIdx !== -1) {
+        let i = matchesKeyIdx;
+        while (i >= 0 && answer[i] !== '{') i--;
+        if (i >= 0) {
+          let depth = 0;
+          let end = -1;
+          for (let j = i; j < answer.length; j++) {
+            const ch = answer[j];
+            if (ch === '{') depth++;
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0) { end = j; break; }
+            }
+          }
+          if (end !== -1) {
+            return (answer.slice(0, i) + answer.slice(end + 1)).trim();
+          }
+        }
+      }
+      return answer;
+    } catch {
+      return answer;
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -74,10 +169,35 @@ export default function CenterChat() {
         },
         // On complete with sources
         (sources: SourceReference[]) => {
+          // Prefer structured matches from the assistant answer if present
+          const structuredMatches = extractMatchesFromAnswer(currentContent);
+          const displayContent = stripMatchesJson(currentContent);
           updateMessage(assistantId, {
+            content: displayContent,
             sources,
             citations: sources.map((s) => s.filename),
           });
+          if (structuredMatches && structuredMatches.length > 0) {
+            setMatches(structuredMatches);
+          } else {
+            // Fallback: map sources to matches
+            try {
+              const mappedMatches = sources.map((s, idx) => ({
+                id: `${s.document_id}-${s.chunk_index}-${idx}`,
+                company: s.content?.slice(0, 60) || s.filename || 'Unknown Source',
+                position: s.filename || `Chunk ${typeof s.chunk_index === 'number' ? s.chunk_index + 1 : 1}`,
+                matchScore: Math.max(0, Math.min(100, Math.round((s.similarity_score ?? 0) * 100))),
+                matchingSkills: [],
+                description: (s.content || '').slice(0, 240) + ((s.content || '').length > 240 ? '…' : ''),
+                documentId: s.document_id,
+                filename: s.filename,
+                chunkIndex: s.chunk_index,
+              }));
+              setMatches(mappedMatches);
+            } catch (e) {
+              console.error('Failed to map sources to matches:', e);
+            }
+          }
           setIsLoading(false);
           setCurrentStreamingId(null);
         },
