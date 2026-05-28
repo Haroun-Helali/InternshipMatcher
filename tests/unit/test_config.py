@@ -8,7 +8,7 @@ def test_settings_default_values():
     
     assert settings.app_name == "Internship RAG Application"
     assert settings.chunk_size == 500
-    assert settings.top_k_results == 5
+    assert settings.rag_top_k_results == 5
     assert settings.ollama_embedding_model == "mxbai-embed-large:latest"
     assert settings.ollama_llm_model == "llama3.2:latest"
 

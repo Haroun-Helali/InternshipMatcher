@@ -1,301 +1,155 @@
-# 🎓 Internship RAG Application
+# Internship Matcher
 
-An AI-powered internship matching and discovery platform using Retrieval-Augmented Generation (RAG) to help students find relevant internship opportunities through semantic search and natural language interaction.
+AI-powered internship matching: upload internship PDFs, ask questions in natural language, get answers with cited sources and a ranked list of matching opportunities.
 
-## 🚀 Features
+Built on FastAPI + LangChain + ChromaDB on the backend and Next.js 16 on the frontend, with local LLM inference via Ollama.
 
-- **Semantic Search**: Find internships using natural language queries
-- **Resume Analysis**: Automatically extract skills and experience from resumes
-- **Intelligent Matching**: AI-powered matching between student profiles and internships
-- **Document Processing**: Parse and index internship descriptions from PDFs
-- **Interactive Chat**: Conversational interface for exploring opportunities
+## What works today
 
-## 🏗️ Architecture
+End-to-end:
+
+- **Upload** PDFs through the UI or `POST /api/v1/documents/upload`. The backend extracts text, splits into chunks, embeds via `mxbai-embed-large`, and stores in ChromaDB.
+- **Query** via the chat UI or `POST /api/v1/query/`. Retrieval-augmented prompts run through `llama3.2` and return an answer plus cited source pages.
+- **Stream** tokens through `ws://.../api/v1/query/stream` for real-time chat responses.
+- **Matches sidebar**: the LLM emits a structured JSON summary that the frontend renders as a ranked list of internships with "View PDF" links to the original document served from `/files`.
+- **Conversation history** is kept per `session_id`.
+
+## Architecture
 
 ```
-┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
-│  Next.js        │ ◄─────► │  FastAPI        │ ◄─────► │  RAG Engine     │
-│  Frontend       │  HTTP   │  Backend        │  Python │  (LangChain)    │
-└─────────────────┘         └─────────────────┘         └─────────────────┘
-                                                                  │
-                                    ┌─────────────────────────────┼─────────────────┐
-                                    │                             │                 │
-                              ┌─────▼─────┐             ┌────────▼────────┐  ┌────▼────┐
-                              │  Ollama   │             │    ChromaDB     │  │  Docs   │
-                              │    LLM    │             │  Vector Store   │  │ Parser  │
-                              └───────────┘             └─────────────────┘  └─────────┘
+Next.js (port 3000)  ─HTTP/WS─►  FastAPI (port 8000)  ─►  RAG pipeline
+                                                              │
+                                                ┌─────────────┼──────────────┐
+                                                ▼             ▼              ▼
+                                            Ollama       ChromaDB         PDF
+                                          (port 11434)   (./chroma_data)  parser
 ```
 
-## 🛠️ Technology Stack
+Models pulled on first run:
+- `llama3.2:latest` — answer generation (~2 GB)
+- `mxbai-embed-large:latest` — embeddings (~669 MB)
 
-### Backend
-- **Framework**: FastAPI
-- **Language**: Python 3.10+
-- **RAG**: LangChain
-- **LLM**: Ollama (llama3.2:latest)
-- **Embeddings**: mxbai-embed-large:latest
-- **Vector DB**: ChromaDB (local)
-- **Document Processing**: PyPDF2, python-docx
+## Prerequisites
 
-### Frontend (Coming in later phases)
-- **Framework**: Next.js 14+
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **State Management**: React Context API
+- Python 3.10 – 3.13 (`langchain-text-splitters==0.0.1` and `chromadb==0.4.22` are pinned and don't build on 3.14)
+- Node.js 18+
+- [Ollama](https://ollama.ai/download)
+- ~3 GB free disk for the model weights
 
-## 📋 Prerequisites
+## Quick start
 
-Before you begin, ensure you have the following installed:
+### macOS / Linux
 
-- **Python 3.10+** ([Download](https://www.python.org/downloads/))
-- **Ollama** ([Download](https://ollama.ai/download))
-- **Git** (for version control)
-- **Node.js 18+** (for frontend in later phases)
+```bash
+./start.sh install   # one-time: venv + pip + npm install + pull models
+./start.sh all       # start backend + frontend
+```
 
-### Install Ollama Models
+Logs land in `logs/backend.log` and `logs/frontend.log`. The PIDs are written to `.backend.pid` and `.frontend.pid` for easy `kill $(cat .backend.pid)`.
 
-After installing Ollama, pull the required models:
+### Windows
 
 ```powershell
+./start.ps1 install
+./start.ps1 all
+```
+
+### Manual
+
+```bash
+# Backend
+python3.11 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+mkdir -p uploads temp_files logs chroma_data
+ollama serve &                          # start daemon
 ollama pull llama3.2:latest
 ollama pull mxbai-embed-large:latest
+python -m backend.app.main              # serves on :8000
+
+# Frontend (separate shell)
+cd frontend && npm install && npm run dev   # serves on :3000
 ```
 
-Verify Ollama is running:
-```powershell
-ollama list
+Once up:
+
+- Frontend: <http://localhost:3000>
+- API docs: <http://localhost:8000/api/v1/docs>
+- Health: <http://localhost:8000/health>
+
+## API surface
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`    | `/health` | Liveness probe |
+| `POST`   | `/api/v1/documents/upload` | Upload PDF, processed in background |
+| `GET`    | `/api/v1/documents/` | List indexed documents |
+| `GET`    | `/api/v1/documents/stats` | Counts and total size |
+| `DELETE` | `/api/v1/documents/{document_id}` | Remove a document |
+| `POST`   | `/api/v1/query/` | Ask a question, get answer + sources |
+| `WS`     | `/api/v1/query/stream` | Streaming token responses |
+| `GET`    | `/api/v1/query/history/{session_id}` | Conversation transcript |
+| `DELETE` | `/api/v1/query/history/{session_id}` | Reset a conversation |
+| `GET`    | `/files/{filename}` | Static PDF download |
+
+Full OpenAPI schema at `/api/v1/openapi.json`.
+
+## Configuration
+
+All settings live in `.env` (copy from `.env.example`). Notable knobs:
+
+| Var | Default | Notes |
+|---|---|---|
+| `BACKEND_HOST` / `BACKEND_PORT` | `0.0.0.0` / `8000` | |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | |
+| `OLLAMA_LLM_MODEL` | `llama3.2:latest` | |
+| `OLLAMA_EMBEDDING_MODEL` | `mxbai-embed-large:latest` | |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `500` / `50` | Text-splitter knobs |
+| `RAG_TOP_K_RESULTS` | `5` | Retrieval depth |
+| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Comma-separated |
+
+## Tests
+
+```bash
+source venv/bin/activate
+pytest -m "not integration"          # unit + e2e mocks, no Ollama needed
+pytest -m integration                # requires Ollama + both models
+pytest                                # everything
 ```
 
-## 🚀 Quick Start
+Coverage report at `htmlcov/index.html` after a run.
 
-### 1. Clone the Repository
-
-```powershell
-cd C:\Users\Yacin\Desktop\project
-```
-
-### 2. Set Up Python Virtual Environment
-
-```powershell
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-.\venv\Scripts\Activate.ps1
-
-# If you get execution policy error, run:
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-### 3. Install Python Dependencies
-
-```powershell
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment Variables
-
-```powershell
-# Copy example environment file
-copy .env.example .env
-
-# Edit .env file with your preferred text editor
-notepad .env
-```
-
-Verify these settings in `.env`:
-- `OLLAMA_BASE_URL=http://localhost:11434`
-- `OLLAMA_EMBEDDING_MODEL=mxbai-embed-large:latest`
-- `OLLAMA_LLM_MODEL=llama3.2:latest`
-
-### 5. Create Required Directories
-
-The application will create these automatically, but you can create them manually:
-
-```powershell
-mkdir -p logs, chroma_data, uploads, temp_files
-```
-
-### 6. Run the Application
-
-```powershell
-# Development mode (with auto-reload)
-python -m backend.app.main
-
-# Or using uvicorn directly
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at:
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/api/v1/docs
-- **Health Check**: http://localhost:8000/health
-
-## 🧪 Running Tests
-
-```powershell
-# Run all tests with coverage
-pytest
-
-# Run specific test file
-pytest tests/unit/test_config.py
-
-# Run with verbose output
-pytest -v
-
-# Generate HTML coverage report
-pytest --cov-report=html
-# Open htmlcov/index.html in browser
-```
-
-## 📁 Project Structure
+## Project layout
 
 ```
-project/
-├── backend/
-│   ├── app/
-│   │   ├── core/           # Core configuration, logging, exceptions
-│   │   ├── api/            # API endpoints (routers)
-│   │   ├── services/       # Business logic services
-│   │   ├── models/         # Pydantic models
-│   │   ├── utils/          # Utility functions
-│   │   └── main.py         # FastAPI application entry point
-│   └── __init__.py
-├── tests/
-│   ├── unit/               # Unit tests
-│   ├── integration/        # Integration tests
-│   └── conftest.py         # Pytest configuration
-├── docs/                   # Documentation
-├── uploads/                # Uploaded document storage
-├── temp_files/             # Temporary file processing
-├── chroma_data/            # ChromaDB persistence
-├── logs/                   # Application logs
-├── .env                    # Environment variables (create from .env.example)
-├── .env.example            # Example environment configuration
-├── .gitignore              # Git ignore rules
-├── requirements.txt        # Python dependencies
-├── pyproject.toml          # Python project configuration
-└── README.md               # This file
+backend/app/
+  api/          # FastAPI routers (documents, query)
+  core/         # config, logging, exceptions
+  services/     # document_processor, embedding_service, vector_store, rag_pipeline, prompts
+  models/       # Pydantic schemas
+  cli/          # dev CLI utilities
+  utils/
+frontend/
+  app/          # Next.js App Router pages
+  components/   # CenterChat, LeftSidebar, RightSidebar, etc.
+  lib/          # api client, WebSocket helpers
+  contexts/     # React contexts (AppContext)
+tests/
+  unit/ integration/ fixtures/
+  conftest.py
 ```
 
-## 🔧 Development
+## Known limitations
 
-### Code Quality Tools
+- **In-memory document metadata**: restart loses the document registry (vectors persist in ChromaDB, but the UI's document list goes empty). Tracked for the SQLite migration.
+- **No authentication**: anyone reaching the API can upload, query, or delete. Add an API-key gate before exposing the service.
+- **LLM-emitted JSON for matches**: the frontend extracts a JSON block from the model's response. Robust enough for `llama3.2`, but a server-side parser is the next step.
+- **Outdated pinned deps**: `chromadb 0.4.22`, `langchain-text-splitters 0.0.1`, `ollama 0.1.6`, `fastapi 0.104.1` — upgrade planned in Phase B.
 
-This project follows SOLID principles and uses modern Python tooling:
+## Roadmap
 
-```powershell
-# Format code with Black
-black backend/
+See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-# Lint with Ruff
-ruff check backend/
+## License
 
-# Type check with MyPy
-mypy backend/
-
-# Run all quality checks
-black backend/ && ruff check backend/ && mypy backend/ && pytest
-```
-
-### Adding New Dependencies
-
-```powershell
-# Install new package
-pip install package-name
-
-# Update requirements.txt
-pip freeze > requirements.txt
-```
-
-## 📝 Development Phases
-
-This application is being built incrementally following a structured phase approach:
-
-- ✅ **Phase 0**: Project Foundation & Environment Setup (COMPLETE)
-- ✅ **Phase 1**: Core RAG Engine - Document Processing (COMPLETE)
-- ✅ **Phase 2**: Vector Store Integration (COMPLETE)
-- 🔄 **Phase 3**: Basic RAG Query Pipeline (NEXT)
-- ⏳ **Phase 4**: FastAPI Backend - Document Management
-- ⏳ **Phase 5**: FastAPI Backend - Query Endpoints
-- ⏳ **Phase 6**: Resume Processing Module
-- ⏳ **Phase 7**: Intelligent Matching Engine
-- ⏳ **Phase 8-12**: Next.js Frontend Development
-- ⏳ **Phase 13**: Polish, Testing & Deployment
-
-See `rag_dev_prompt.md` for detailed phase descriptions.
-
-## 🐛 Troubleshooting
-
-### Ollama Connection Issues
-
-```powershell
-# Check if Ollama is running
-ollama list
-
-# Restart Ollama service
-# On Windows: Restart Ollama from system tray
-```
-
-### Virtual Environment Issues
-
-```powershell
-# Deactivate current environment
-deactivate
-
-# Remove and recreate
-Remove-Item -Recurse -Force venv
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-### Import Errors
-
-Make sure you're running commands from the project root and the virtual environment is activated:
-```powershell
-# Check current directory
-pwd
-# Should output: C:\Users\Yacin\Desktop\project
-
-# Check if venv is active (you should see (venv) in prompt)
-```
-
-### ChromaDB Issues
-
-```powershell
-# Clear ChromaDB data
-Remove-Item -Recurse -Force chroma_data
-```
-
-## 🤝 Contributing
-
-This is currently a learning/development project. Future contribution guidelines will be added.
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
-## 🔗 Resources
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [LangChain Documentation](https://python.langchain.com/)
-- [Ollama Documentation](https://ollama.ai/docs)
-- [ChromaDB Documentation](https://docs.trychroma.com/)
-
-## ✨ Next Steps
-
-After Phase 2 completion:
-
-1. **Test embeddings**: Run integration tests to verify Ollama connectivity
-2. **Verify vector store**: Check ChromaDB persistence in `./chroma_data`
-3. **Review Phase 2 docs**: Read `docs/PHASE_2_COMPLETE.md` for implementation details
-4. **Run full test suite**: Execute `pytest` to ensure all 40 tests pass
-5. **Ready for Phase 3**: Begin RAG query pipeline implementation
-
----
-
-**Current Version**: 0.1.0  
-**Status**: Phase 2 Complete ✅ (40/40 tests passing)  
-**Last Updated**: 2024-01-XX
+MIT

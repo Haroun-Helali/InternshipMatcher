@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (pytest + ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        # Non-blocking: pre-existing codebase has hundreds of whitespace/unused
+        # warnings. Phase B includes a `ruff --fix` cleanup pass, at which
+        # point we flip this to a required check.
+        run: ruff check backend tests
+        continue-on-error: true
+
+      - name: Run non-integration tests
+        # Integration tests need a live Ollama daemon with both models pulled,
+        # which CI can't reasonably provide. Run them locally via
+        # `pytest -m integration` against a real backend.
+        run: pytest -m "not integration" --cov=backend --cov-report=term-missing
+
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
