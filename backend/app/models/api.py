@@ -2,9 +2,19 @@
 Pydantic models for API requests and responses.
 """
 
+from enum import Enum
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
+
+
+class DocumentStatusValue(str, Enum):
+    """Lifecycle state of an uploaded document."""
+
+    PENDING = "pending"      # accepted by /upload, not yet picked up by the worker
+    PROCESSING = "processing"  # extracting text + embedding
+    READY = "ready"          # chunks indexed; queryable
+    FAILED = "failed"        # background task raised; see `error`
 
 
 # Document Models
@@ -33,9 +43,20 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentListResponse(BaseModel):
     """Response for listing documents."""
-    
+
     documents: List[DocumentMetadataResponse]
     total_count: int
+
+
+class DocumentStatusResponse(BaseModel):
+    """Processing state for a single uploaded document."""
+
+    document_id: str
+    state: DocumentStatusValue
+    filename: str
+    chunks_indexed: int = 0
+    error: Optional[str] = None
+    updated_at: datetime
 
 
 class DocumentStatsResponse(BaseModel):
@@ -66,11 +87,27 @@ class SourceReference(BaseModel):
     content_preview: str
 
 
+class Match(BaseModel):
+    """Structured internship match extracted from the LLM answer."""
+
+    title: str
+    company: Optional[str] = None
+    requirements: List[str] = Field(default_factory=list)
+    score: int = Field(default=0, ge=0, le=100)
+    source_file: Optional[str] = None
+    document_id: Optional[str] = None
+
+
 class QueryResponse(BaseModel):
-    """Response for RAG query."""
-    
+    """Response for RAG query.
+
+    `answer` is the human-readable text with the JSON summary block stripped.
+    `matches` is the structured form of that JSON, parsed server-side.
+    """
+
     answer: str
     sources: List[SourceReference]
+    matches: List[Match] = Field(default_factory=list)
     query: str
     model: str
     session_id: Optional[str] = None

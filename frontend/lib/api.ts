@@ -34,9 +34,19 @@ export interface SourceReference {
   similarity_score: number;
 }
 
+export interface Match {
+  title: string;
+  company: string | null;
+  requirements: string[];
+  score: number;
+  source_file: string | null;
+  document_id: string | null;
+}
+
 export interface QueryResponse {
   answer: string;
   sources: SourceReference[];
+  matches: Match[];
   session_id: string;
 }
 
@@ -148,14 +158,19 @@ export const queryApi = {
   },
 
   /**
-   * Create a WebSocket connection for streaming responses
+   * Create a WebSocket connection for streaming responses.
+   *
+   * Server emits, in order: `chunk` (many), `sources`, `matches`, `done`.
+   * The `matches` event carries the parsed match list plus a `cleaned_answer`
+   * with the JSON code-fence stripped — use that as the final message text.
    */
   createStreamConnection(
     question: string,
     sessionId: string | null,
     onChunk: (chunk: string) => void,
     onComplete: (sources: SourceReference[]) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    onMatches?: (matches: Match[], cleanedAnswer: string) => void,
   ): WebSocket {
     const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
     const ws = new WebSocket(`${wsUrl}/query/stream`);
@@ -177,6 +192,8 @@ export const queryApi = {
           onChunk(data.content);
         } else if (data.type === 'sources') {
           onComplete(data.sources);
+        } else if (data.type === 'matches') {
+          onMatches?.(data.matches || [], data.cleaned_answer ?? '');
         } else if (data.type === 'error') {
           onError(data.message);
           ws.close();

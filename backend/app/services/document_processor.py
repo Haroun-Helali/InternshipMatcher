@@ -41,17 +41,23 @@ class DocumentProcessor:
     def process_pdf(
         self,
         file_path: Path,
-        custom_metadata: Optional[dict] = None
+        custom_metadata: Optional[dict] = None,
+        document_id: Optional[str] = None,
     ) -> ProcessedDocument:
         """Process a PDF file and return structured document with chunks.
-        
+
         Args:
             file_path: Path to the PDF file
             custom_metadata: Optional custom metadata to attach
-            
+            document_id: Optional pre-assigned document ID. When the caller
+                (e.g. the upload endpoint) already generated an ID and handed
+                it back to the client, pass it here so the rest of the
+                pipeline (vector store, listings) uses the same value.
+                Generates a new UUID when None.
+
         Returns:
             ProcessedDocument with all chunks and metadata
-            
+
         Raises:
             DocumentProcessingError: If PDF processing fails
         """
@@ -76,9 +82,9 @@ class DocumentProcessor:
             chunks = self._chunk_text(cleaned_text, metadata)
             
             # Create processed document
-            document_id = str(uuid.uuid4())
+            doc_id = document_id or str(uuid.uuid4())
             processed_doc = ProcessedDocument(
-                document_id=document_id,
+                document_id=doc_id,
                 metadata=metadata,
                 chunks=chunks,
                 total_chunks=len(chunks)

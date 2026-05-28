@@ -17,12 +17,12 @@ Low-risk hygiene that unblocks everything after it. No architecture decisions.
 
 Kill the fragility points the audit surfaced.
 
-- **Document ID consistency**. The upload endpoint at [documents.py:124](../backend/app/api/documents.py#L124) generates one `document_id`, returns it to the client, then `process_document_background` calls `doc_processor.process_pdf` which mints its *own* internal ID and stores under that. The two never reconcile. Fix: thread the upload ID through to the processor, or drop the upload-side ID. Surfaced by the new e2e test, which currently works around it by matching documents by filename.
-- **Server-side match extraction**. Move the JSON parsing now done in [CenterChat.tsx:34-90](../frontend/components/CenterChat.tsx#L34-L90) into the backend. `QueryResponse` gains a typed `matches: List[Match]` field. The LLM still emits JSON, but parsing happens once, with a validator, and clients consume structured data.
-- **Ruff cleanup**. 463 pre-existing lint warnings (mostly trailing whitespace, unused imports). Run `ruff check --fix backend tests`, review the result, flip `continue-on-error` off in `.github/workflows/ci.yml`.
-- **Upload status endpoint**. `GET /api/v1/documents/{id}/status` returns `{state: "uploading"|"processing"|"ready"|"failed", chunks_indexed: N, error?: str}`. Frontend polls or subscribes; users stop guessing whether their PDF is ready.
-- **SQLite metadata store**. Replace the in-memory `documents_metadata = {}` at [documents.py:35](../backend/app/api/documents.py#L35) with a `documents` table (SQLAlchemy or raw `sqlite3`). Vectors stay in ChromaDB. Survives reboots.
+- [x] **Document ID consistency**. The upload endpoint generated one `document_id` but `doc_processor.process_pdf` minted its own. Threaded the upload ID through; e2e test now asserts the API-returned ID matches the listing + query sources.
+- [x] **Server-side match extraction**. `QueryResponse` now carries `matches: List[Match]` parsed by `backend/app/services/match_parser.py`. The WS stream emits a `matches` event with a `cleaned_answer`. Frontend regex parser is gone.
+- [x] **Upload status endpoint**. `GET /api/v1/documents/{id}/status` returns `{state: pending|processing|ready|failed, chunks_indexed, error}`. Backed by a per-process `documents_status` dict for now (durable version arrives with SQLite).
+- **SQLite metadata store**. Replace the in-memory `documents_metadata = {}` and `documents_status = {}` at [documents.py:35-50](../backend/app/api/documents.py#L35-L50) with a `documents` table (SQLAlchemy or raw `sqlite3`). Vectors stay in ChromaDB. Survives reboots.
 - **Dependency refresh**. Upgrade `langchain-text-splitters`, `chromadb`, `ollama`, `fastapi`, `pydantic` to current versions. Run unit + integration tests against the new pins; bump `requires-python` if needed.
+- **Ruff cleanup**. 463 pre-existing lint warnings (mostly trailing whitespace, unused imports). Run `ruff check --fix backend tests`, review the result, flip `continue-on-error` off in `.github/workflows/ci.yml`.
 
 Definition of done: a backend restart no longer wipes the document list; a malformed LLM response no longer empties the matches sidebar; CI passes on Python 3.12 with the upgraded deps.
 

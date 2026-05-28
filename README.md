@@ -85,6 +85,7 @@ Once up:
 | `POST`   | `/api/v1/documents/upload` | Upload PDF, processed in background |
 | `GET`    | `/api/v1/documents/` | List indexed documents |
 | `GET`    | `/api/v1/documents/stats` | Counts and total size |
+| `GET`    | `/api/v1/documents/{document_id}/status` | Lifecycle state: pending / processing / ready / failed |
 | `DELETE` | `/api/v1/documents/{document_id}` | Remove a document |
 | `POST`   | `/api/v1/query/` | Ask a question, get answer + sources |
 | `WS`     | `/api/v1/query/stream` | Streaming token responses |
@@ -141,9 +142,8 @@ tests/
 
 ## Known limitations
 
-- **In-memory document metadata**: restart loses the document registry (vectors persist in ChromaDB, but the UI's document list goes empty). Tracked for the SQLite migration.
+- **In-memory document metadata**: restart loses the document registry (vectors persist in ChromaDB, but the UI's document list goes empty). Tracked for the SQLite migration in Phase B.
 - **No authentication**: anyone reaching the API can upload, query, or delete. Add an API-key gate before exposing the service.
-- **LLM-emitted JSON for matches**: the frontend extracts a JSON block from the model's response. Robust enough for `llama3.2`, but a server-side parser is the next step.
 - **Outdated pinned deps**: `chromadb 0.4.22`, `langchain-text-splitters 0.0.1`, `ollama 0.1.6`, `fastapi 0.104.1` — upgrade planned in Phase B.
 
 ## Roadmap

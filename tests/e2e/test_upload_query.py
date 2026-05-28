@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.services.vector_store import get_vector_store
 
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_internship.pdf"
@@ -23,16 +24,36 @@ def client():
 
 
 def _delete_all(client: TestClient) -> None:
-    """Remove every indexed document via the public API.
+    """Wipe every chunk in the vector store.
 
-    Avoids `vector_store.clear_collection()` because that drops + recreates the
-    underlying ChromaDB collection, which leaves singleton references pointing
+    The TestClient runs in this process with its own in-memory metadata dict,
+    but ChromaDB persists to ./chroma_data on disk and is shared with any
+    other backend process pointed at the same directory. So we have to clear
+    by chunk-id directly — iterating documents_metadata via the API would
+    miss orphan chunks left by other processes.
+
+    We avoid `vector_store.clear_collection()` because that drops + recreates
+    the underlying ChromaDB collection, leaving singleton references pointing
     at the old (deleted) collection UUID and the next query fails with
     InvalidCollectionException.
     """
-    listing = client.get("/api/v1/documents/").json()
-    for doc in listing.get("documents", []):
-        client.delete(f"/api/v1/documents/{doc['document_id']}")
+    store = get_vector_store()
+    try:
+        ids = store.collection.get(include=[])["ids"]
+    except Exception:
+        return
+    if ids:
+        try:
+            store.collection.delete(ids=ids)
+        except Exception:
+            pass
+
+    # Also clear the per-process metadata + status dicts so the listing
+    # endpoint reflects reality.
+    from backend.app.api.documents import documents_metadata, documents_status
+
+    documents_metadata.clear()
+    documents_status.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -43,17 +64,24 @@ def clean_corpus(client: TestClient):
 
 
 def _wait_for_indexing(client: TestClient, document_id: str, timeout_s: float = 60.0) -> int:
-    """Poll the stats endpoint until at least one chunk lands in the vector store.
+    """Poll the per-document status endpoint until processing settles.
 
     Background tasks fire after the upload response is sent, so we have to wait.
-    Returns the number of chunks indexed.
+    Returns the number of chunks indexed. Raises if the doc enters FAILED state.
     """
     deadline = time.time() + timeout_s
     while time.time() < deadline:
-        stats = client.get("/api/v1/documents/stats").json()
-        if stats["total_chunks"] > 0:
-            return stats["total_chunks"]
-        time.sleep(1.0)
+        r = client.get(f"/api/v1/documents/{document_id}/status")
+        if r.status_code == 200:
+            body = r.json()
+            state = body["state"]
+            if state == "ready":
+                return body["chunks_indexed"]
+            if state == "failed":
+                raise AssertionError(
+                    f"Document {document_id} processing failed: {body.get('error')}"
+                )
+        time.sleep(0.5)
     raise AssertionError(
         f"Document {document_id} never finished indexing within {timeout_s}s"
     )
@@ -70,19 +98,17 @@ def test_upload_then_query_returns_answer_and_sources(client: TestClient) -> Non
     assert upload.status_code == 200, upload.text
     body = upload.json()
     assert body["success"] is True
-    # Note: the upload returns one document_id but the document_processor mints
-    # its own internal ID (see docs/ROADMAP.md Phase B — ID consistency bug).
-    # Match by filename until that's fixed.
-    assert body["document_id"]
+    document_id = body["document_id"]
+    assert document_id
 
-    chunks = _wait_for_indexing(client, body["document_id"])
+    chunks = _wait_for_indexing(client, document_id)
     assert chunks > 0
 
-    # The processed document should appear in the listing under the filename.
+    # The document_id returned by /upload must match what shows up downstream.
     listing = client.get("/api/v1/documents/").json()
-    matches = [d for d in listing["documents"] if d["filename"] == FIXTURE.name]
-    assert matches, f"sample_internship.pdf not found in {listing}"
-    indexed_id = matches[0]["document_id"]
+    assert any(d["document_id"] == document_id for d in listing["documents"]), (
+        f"document {document_id} not in listing {listing}"
+    )
 
     # Query the corpus
     query = client.post(
@@ -99,9 +125,40 @@ def test_upload_then_query_returns_answer_and_sources(client: TestClient) -> Non
     assert isinstance(result["sources"], list)
     assert len(result["sources"]) >= 1
     src = result["sources"][0]
-    assert src["document_id"] == indexed_id
+    assert src["document_id"] == document_id
     assert src["page_number"] >= 0
     assert src["content_preview"]
+
+
+@pytest.mark.integration
+def test_upload_status_progresses_to_ready(client: TestClient) -> None:
+    """The status endpoint should reflect each lifecycle step."""
+    with FIXTURE.open("rb") as f:
+        body = client.post(
+            "/api/v1/documents/upload",
+            files={"file": (FIXTURE.name, f, "application/pdf")},
+        ).json()
+    document_id = body["document_id"]
+
+    # Right after /upload, state is pending or processing — never 404.
+    first = client.get(f"/api/v1/documents/{document_id}/status")
+    assert first.status_code == 200, first.text
+    assert first.json()["state"] in {"pending", "processing", "ready"}
+
+    chunks = _wait_for_indexing(client, document_id)
+    assert chunks > 0
+
+    final = client.get(f"/api/v1/documents/{document_id}/status").json()
+    assert final["state"] == "ready"
+    assert final["chunks_indexed"] == chunks
+    assert final["error"] is None
+    assert final["filename"] == FIXTURE.name
+
+
+@pytest.mark.integration
+def test_status_endpoint_returns_404_for_unknown_document(client: TestClient) -> None:
+    r = client.get("/api/v1/documents/not-a-real-doc-id/status")
+    assert r.status_code == 404
 
 
 @pytest.mark.integration

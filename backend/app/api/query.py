@@ -14,6 +14,7 @@ from backend.app.models.api import (
     ConversationHistoryResponse,
 )
 from backend.app.core.exceptions import RAGPipelineError
+from backend.app.services.match_parser import extract_matches
 from backend.app.services.rag_pipeline import create_rag_pipeline
 
 logger = logging.getLogger(__name__)
@@ -58,10 +59,13 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
             )
             for source in response.sources
         ]
-        
+
+        cleaned_answer, matches = extract_matches(response.answer)
+
         return QueryResponse(
-            answer=response.answer,
+            answer=cleaned_answer,
             sources=sources,
+            matches=matches,
             query=response.query,
             model=response.model,
             session_id=request.session_id
@@ -158,7 +162,18 @@ async def query_stream(websocket: WebSocket):
                     "type": "sources",
                     "sources": sources
                 })
-                
+
+                # Parse the structured matches block out of the full answer
+                # and ship it so the frontend doesn't need to re-parse the
+                # streamed text. `cleaned_answer` is the visible message with
+                # the JSON code-fence removed.
+                cleaned_answer, matches = extract_matches(full_answer)
+                await websocket.send_json({
+                    "type": "matches",
+                    "cleaned_answer": cleaned_answer,
+                    "matches": [m.model_dump() for m in matches],
+                })
+
                 # Send completion signal
                 await websocket.send_json({
                     "type": "done"
