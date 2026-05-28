@@ -25,11 +25,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Lint with ruff
-        # Non-blocking: pre-existing codebase has hundreds of whitespace/unused
-        # warnings. Phase B includes a `ruff --fix` cleanup pass, at which
-        # point we flip this to a required check.
         run: ruff check backend tests
-        continue-on-error: true
 
       - name: Run non-integration tests
         # Integration tests need a live Ollama daemon with both models pulled,

@@ -19,10 +19,10 @@ Kill the fragility points the audit surfaced.
 
 - [x] **Document ID consistency**. The upload endpoint generated one `document_id` but `doc_processor.process_pdf` minted its own. Threaded the upload ID through; e2e test now asserts the API-returned ID matches the listing + query sources.
 - [x] **Server-side match extraction**. `QueryResponse` now carries `matches: List[Match]` parsed by `backend/app/services/match_parser.py`. The WS stream emits a `matches` event with a `cleaned_answer`. Frontend regex parser is gone.
-- [x] **Upload status endpoint**. `GET /api/v1/documents/{id}/status` returns `{state: pending|processing|ready|failed, chunks_indexed, error}`. Backed by a per-process `documents_status` dict for now (durable version arrives with SQLite).
-- **SQLite metadata store**. Replace the in-memory `documents_metadata = {}` and `documents_status = {}` at [documents.py:35-50](../backend/app/api/documents.py#L35-L50) with a `documents` table (SQLAlchemy or raw `sqlite3`). Vectors stay in ChromaDB. Survives reboots.
-- **Dependency refresh**. Upgrade `langchain-text-splitters`, `chromadb`, `ollama`, `fastapi`, `pydantic` to current versions. Run unit + integration tests against the new pins; bump `requires-python` if needed.
-- **Ruff cleanup**. 463 pre-existing lint warnings (mostly trailing whitespace, unused imports). Run `ruff check --fix backend tests`, review the result, flip `continue-on-error` off in `.github/workflows/ci.yml`.
+- [x] **Upload status endpoint**. `GET /api/v1/documents/{id}/status` returns `{state: pending|processing|ready|failed, chunks_indexed, error}`.
+- [x] **SQLite metadata store**. `backend/app/services/document_store.py` wraps a single `documents` table keyed by `document_id` with both metadata and lifecycle status. Survives backend restarts; verified manually with an upload → restart → list cycle.
+- [x] **Dependency refresh**. `chromadb 0.4.22 → 1.5.9`, `langchain-text-splitters 0.0.1 → 1.1.2`, `ollama 0.1.6 → 0.6.2`, `fastapi 0.104.1 → 0.136.3`, `pydantic 2.5.0 → 2.13.4`. All tests still pass.
+- [x] **Ruff cleanup**. 445 → 0 violations after `ruff --fix` plus 17 manual `raise ... from e` patches and a handful of `# noqa` on intentional late imports. CI ruff check is now required (no `continue-on-error`).
 
 Definition of done: a backend restart no longer wipes the document list; a malformed LLM response no longer empties the matches sidebar; CI passes on Python 3.12 with the upgraded deps.
 

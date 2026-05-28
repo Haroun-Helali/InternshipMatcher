@@ -10,16 +10,16 @@ This module orchestrates the complete RAG workflow:
 """
 
 import logging
-from typing import List, Dict, Any, Optional, AsyncIterator
-import httpx
 from dataclasses import dataclass
+from typing import Any, AsyncIterator, Dict, List, Optional
+
+import httpx
 
 from backend.app.core.config import get_settings
 from backend.app.core.exceptions import RAGPipelineError
 from backend.app.services.embedding_service import EmbeddingService
-from backend.app.services.vector_store import VectorStore
 from backend.app.services.prompts import PromptTemplates
-from backend.app.models.document import DocumentChunk
+from backend.app.services.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class RAGPipeline:
 
         # Conversation history (session_id -> turns)
         self.conversations: Dict[str, List[ConversationTurn]] = {}
-        
+
         # Store last retrieved sources for access after streaming
         self.last_retrieved_sources: List[Dict] = []
 
@@ -239,7 +239,7 @@ class RAGPipeline:
             results = self.vector_store.similarity_search(
                 query_embedding=query_embedding, top_k=top_k, filter_metadata=filters
             )
-            
+
             # Store sources for later retrieval
             self.last_retrieved_sources = results
 

@@ -11,11 +11,30 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.core.config import get_settings
 from backend.app.main import app
+from backend.app.services.document_store import (
+    get_document_store,
+    reset_document_store_for_tests,
+)
 from backend.app.services.vector_store import get_vector_store
 
-
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_internship.pdf"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _isolate_document_store(tmp_path_factory):
+    """Point the document store at a tmpdir so tests don't touch repo state."""
+    db = tmp_path_factory.mktemp("docstore") / "documents.sqlite"
+    settings = get_settings()
+    original = settings.document_db_path
+    settings.document_db_path = str(db)
+    reset_document_store_for_tests()
+    # Force creation so subsequent get_document_store() calls reuse this DB.
+    get_document_store()
+    yield
+    settings.document_db_path = original
+    reset_document_store_for_tests()
 
 
 @pytest.fixture
@@ -24,36 +43,30 @@ def client():
 
 
 def _delete_all(client: TestClient) -> None:
-    """Wipe every chunk in the vector store.
+    """Wipe every chunk in the vector store and every row in the SQLite store.
 
-    The TestClient runs in this process with its own in-memory metadata dict,
-    but ChromaDB persists to ./chroma_data on disk and is shared with any
-    other backend process pointed at the same directory. So we have to clear
-    by chunk-id directly — iterating documents_metadata via the API would
-    miss orphan chunks left by other processes.
+    ChromaDB persists to ./chroma_data on disk and is shared with any other
+    backend process pointed at the same directory, so we have to clear by
+    chunk-id directly — iterating /documents would miss orphan chunks left
+    by other processes.
 
     We avoid `vector_store.clear_collection()` because that drops + recreates
     the underlying ChromaDB collection, leaving singleton references pointing
     at the old (deleted) collection UUID and the next query fails with
     InvalidCollectionException.
     """
-    store = get_vector_store()
+    vstore = get_vector_store()
     try:
-        ids = store.collection.get(include=[])["ids"]
+        ids = vstore.collection.get(include=[])["ids"]
     except Exception:
-        return
+        ids = []
     if ids:
         try:
-            store.collection.delete(ids=ids)
+            vstore.collection.delete(ids=ids)
         except Exception:
             pass
 
-    # Also clear the per-process metadata + status dicts so the listing
-    # endpoint reflects reality.
-    from backend.app.api.documents import documents_metadata, documents_status
-
-    documents_metadata.clear()
-    documents_status.clear()
+    get_document_store().clear()
 
 
 @pytest.fixture(autouse=True)

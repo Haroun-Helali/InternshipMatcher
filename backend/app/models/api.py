@@ -2,10 +2,11 @@
 Pydantic models for API requests and responses.
 """
 
-from enum import Enum
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class DocumentStatusValue(str, Enum):
@@ -20,7 +21,7 @@ class DocumentStatusValue(str, Enum):
 # Document Models
 class DocumentMetadataResponse(BaseModel):
     """Document metadata response."""
-    
+
     document_id: str
     filename: str
     file_size: int
@@ -32,7 +33,7 @@ class DocumentMetadataResponse(BaseModel):
 
 class DocumentUploadResponse(BaseModel):
     """Response for document upload."""
-    
+
     success: bool
     message: str
     document_id: str
@@ -61,7 +62,7 @@ class DocumentStatusResponse(BaseModel):
 
 class DocumentStatsResponse(BaseModel):
     """Knowledge base statistics."""
-    
+
     total_documents: int
     total_chunks: int
     total_size_bytes: int
@@ -71,7 +72,7 @@ class DocumentStatsResponse(BaseModel):
 # Query Models
 class QueryRequest(BaseModel):
     """Request for RAG query."""
-    
+
     question: str = Field(..., min_length=1, max_length=1000)
     top_k: Optional[int] = Field(default=5, ge=1, le=20)
     session_id: Optional[str] = None
@@ -80,7 +81,7 @@ class QueryRequest(BaseModel):
 
 class SourceReference(BaseModel):
     """Source document reference."""
-    
+
     source_file: str
     page_number: int
     document_id: str
@@ -115,7 +116,7 @@ class QueryResponse(BaseModel):
 
 class ConversationHistoryResponse(BaseModel):
     """Conversation history response."""
-    
+
     session_id: str
     turns: List[Dict[str, str]]
     turn_count: int
@@ -124,7 +125,7 @@ class ConversationHistoryResponse(BaseModel):
 # Health & Status Models
 class HealthResponse(BaseModel):
     """Health check response."""
-    
+
     status: str
     version: str
     services: Dict[str, bool]
@@ -132,7 +133,7 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Error response."""
-    
+
     error: str
     detail: Optional[str] = None
     status_code: int

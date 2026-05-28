@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class DocumentMetadata(BaseModel):
     """Metadata for a processed document."""
-    
+
     filename: str = Field(..., description="Original filename")
     file_size: int = Field(..., description="File size in bytes")
     upload_date: datetime = Field(default_factory=datetime.now)
@@ -18,13 +18,13 @@ class DocumentMetadata(BaseModel):
 
 class DocumentChunk(BaseModel):
     """A chunk of text from a document with metadata."""
-    
+
     content: str = Field(..., description="Text content of the chunk")
     chunk_index: int = Field(..., description="Index of this chunk in the document")
     start_page: Optional[int] = Field(None, description="Starting page number")
     end_page: Optional[int] = Field(None, description="Ending page number")
     metadata: DocumentMetadata = Field(..., description="Document metadata")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -44,12 +44,12 @@ class DocumentChunk(BaseModel):
 
 class ProcessedDocument(BaseModel):
     """A fully processed document with all chunks."""
-    
+
     document_id: str = Field(..., description="Unique document identifier")
     metadata: DocumentMetadata = Field(..., description="Document metadata")
     chunks: List[DocumentChunk] = Field(..., description="List of text chunks")
     total_chunks: int = Field(..., description="Total number of chunks")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -68,7 +68,7 @@ class ProcessedDocument(BaseModel):
 
 class DocumentUploadResponse(BaseModel):
     """Response after document upload."""
-    
+
     document_id: str = Field(..., description="Unique document identifier")
     filename: str = Field(..., description="Original filename")
     status: str = Field(..., description="Processing status")

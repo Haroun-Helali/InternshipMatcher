@@ -3,17 +3,16 @@ Query API endpoints for RAG functionality.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from typing import Dict
-import uuid
 
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+
+from backend.app.core.exceptions import RAGPipelineError
 from backend.app.models.api import (
+    ConversationHistoryResponse,
     QueryRequest,
     QueryResponse,
     SourceReference,
-    ConversationHistoryResponse,
 )
-from backend.app.core.exceptions import RAGPipelineError
 from backend.app.services.match_parser import extract_matches
 from backend.app.services.rag_pipeline import create_rag_pipeline
 
@@ -28,19 +27,19 @@ rag_pipeline = create_rag_pipeline()
 async def query_documents(request: QueryRequest) -> QueryResponse:
     """
     Query the knowledge base using RAG.
-    
+
     Args:
         request: Query request with question and optional parameters
-        
+
     Returns:
         Generated answer with source citations
-        
+
     Raises:
         HTTPException: If query processing fails
     """
     try:
         logger.info(f"Processing query: {request.question[:100]}...")
-        
+
         # Execute RAG query
         response = await rag_pipeline.query(
             question=request.question,
@@ -48,7 +47,7 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
             session_id=request.session_id,
             filters=request.filters
         )
-        
+
         # Format sources
         sources = [
             SourceReference(
@@ -70,61 +69,61 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
             model=response.model,
             session_id=request.session_id
         )
-        
+
     except RAGPipelineError as e:
         logger.error(f"RAG pipeline error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Query processing failed: {str(e)}"
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error during query: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="An unexpected error occurred"
-        )
+        ) from e
 
 
 @router.websocket("/stream")
 async def query_stream(websocket: WebSocket):
     """
     WebSocket endpoint for streaming RAG responses.
-    
+
     Client sends JSON: {"question": "...", "top_k": 5, "session_id": "..."}
     Server streams tokens as they're generated.
     """
     await websocket.accept()
     logger.info("WebSocket connection established")
-    
+
     try:
         while True:
             # Receive query from client
             data = await websocket.receive_json()
-            
+
             question = data.get("question")
             if not question:
                 await websocket.send_json({
                     "error": "Missing required field: question"
                 })
                 continue
-            
+
             top_k = data.get("top_k", 5)
             session_id = data.get("session_id")
             filters = data.get("filters")
-            
+
             logger.info(f"Streaming query: {question[:100]}...")
-            
+
             try:
                 # Send start signal
                 await websocket.send_json({
                     "type": "start",
                     "session_id": session_id
                 })
-                
+
                 # Collect sources while streaming
                 sources = []
                 full_answer = ""
-                
+
                 # Stream response tokens
                 async for token in rag_pipeline.query_stream(
                     question=question,
@@ -137,12 +136,12 @@ async def query_stream(websocket: WebSocket):
                         "type": "chunk",  # Changed from "token" to "chunk"
                         "content": token
                     })
-                
+
                 # Get sources from the last query
                 try:
                     # Retrieve sources from RAG pipeline (already fetched during streaming)
                     results = rag_pipeline.last_retrieved_sources
-                    
+
                     sources = [
                         {
                             "document_id": result["metadata"].get("document_id", "unknown"),
@@ -156,7 +155,7 @@ async def query_stream(websocket: WebSocket):
                 except Exception as e:
                     logger.error(f"Failed to retrieve sources: {e}")
                     sources = []
-                
+
                 # Send sources
                 await websocket.send_json({
                     "type": "sources",
@@ -178,7 +177,7 @@ async def query_stream(websocket: WebSocket):
                 await websocket.send_json({
                     "type": "done"
                 })
-                
+
             except RAGPipelineError as e:
                 logger.error(f"RAG pipeline error: {e}", exc_info=True)
                 await websocket.send_json({
@@ -191,7 +190,7 @@ async def query_stream(websocket: WebSocket):
                     "type": "error",
                     "message": "An unexpected error occurred"  # Changed from "error" to "message"
                 })
-                
+
     except WebSocketDisconnect:
         logger.info("WebSocket connection closed")
     except Exception as e:
@@ -205,52 +204,52 @@ async def query_stream(websocket: WebSocket):
 async def get_conversation_history(session_id: str) -> ConversationHistoryResponse:
     """
     Get conversation history for a session.
-    
+
     Args:
         session_id: Session identifier
-        
+
     Returns:
         Conversation history
     """
     try:
         history = rag_pipeline.get_conversation_history(session_id)
-        
+
         return ConversationHistoryResponse(
             session_id=session_id,
             turns=history,
             turn_count=len(history)
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get history: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve conversation history"
-        )
+        ) from e
 
 
 @router.delete("/history/{session_id}")
 async def clear_conversation_history(session_id: str) -> dict:
     """
     Clear conversation history for a session.
-    
+
     Args:
         session_id: Session identifier
-        
+
     Returns:
         Success message
     """
     try:
         rag_pipeline.clear_conversation(session_id)
-        
+
         return {
             "success": True,
             "message": f"Conversation history cleared for session {session_id}"
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to clear history: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="Failed to clear conversation history"
-        )
+        ) from e

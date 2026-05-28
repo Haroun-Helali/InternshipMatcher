@@ -21,7 +21,7 @@ def sample_pdf_path():
 def mock_settings():
     """Mock settings for testing."""
     from backend.app.core.config import Settings
-    
+
     return Settings(
         environment="testing",
         chroma_persist_directory="./test_chroma_data",

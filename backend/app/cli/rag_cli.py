@@ -11,21 +11,22 @@ Usage:
     python -m backend.app.cli.rag_cli --query "What internships are available?"
 """
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import Optional
-import argparse
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from backend.app.services.rag_pipeline import create_rag_pipeline
-from backend.app.services.document_processor import get_document_processor
-from backend.app.services.embedding_service import get_embedding_service
-from backend.app.services.vector_store import get_vector_store
-from backend.app.core.logging import setup_logging
+# Imports follow sys.path manipulation above, so they're intentionally not at
+# the top of the file — silence ruff's E402.
+from backend.app.core.logging import setup_logging  # noqa: E402
+from backend.app.services.document_processor import get_document_processor  # noqa: E402
+from backend.app.services.embedding_service import get_embedding_service  # noqa: E402
+from backend.app.services.rag_pipeline import create_rag_pipeline  # noqa: E402
+from backend.app.services.vector_store import get_vector_store  # noqa: E402
 
 
 async def process_and_index_documents(upload_dir: str = "./uploads") -> int:
@@ -68,7 +69,7 @@ async def process_and_index_documents(upload_dir: str = "./uploads") -> int:
             print(f"  ✓ Extracted {len(processed_doc.chunks)} chunks")
 
             # Generate embeddings
-            print(f"  🔄 Generating embeddings...")
+            print("  🔄 Generating embeddings...")
             texts = [chunk.content for chunk in processed_doc.chunks]
             embeddings = await embedding_service.generate_embeddings_batch(
                 texts, batch_size=5
@@ -76,7 +77,7 @@ async def process_and_index_documents(upload_dir: str = "./uploads") -> int:
             print(f"  ✓ Generated {len(embeddings)} embeddings")
 
             # Add to vector store
-            print(f"  💾 Adding to vector store...")
+            print("  💾 Adding to vector store...")
             vector_store.add_documents(
                 processed_doc.chunks, embeddings, processed_doc.document_id
             )
@@ -93,7 +94,7 @@ async def process_and_index_documents(upload_dir: str = "./uploads") -> int:
     return total_chunks
 
 
-async def interactive_query_mode(rag_pipeline):
+async def interactive_query_mode(rag_pipeline):  # noqa: C901
     """
     Run interactive query mode where user can ask questions.
 

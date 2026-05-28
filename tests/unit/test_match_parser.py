@@ -1,7 +1,6 @@
 """Unit tests for the server-side match-JSON extractor."""
 from backend.app.services.match_parser import extract_matches
 
-
 FENCED_ANSWER = """Here are two solid options.
 
 ```json

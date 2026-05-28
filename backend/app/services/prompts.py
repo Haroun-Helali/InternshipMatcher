@@ -5,7 +5,7 @@ This module contains all prompt templates used for generating responses
 using the RAG (Retrieval-Augmented Generation) approach.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 
 class PromptTemplates:

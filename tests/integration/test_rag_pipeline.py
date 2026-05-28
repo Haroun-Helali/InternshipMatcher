@@ -2,13 +2,13 @@
 
 These tests require Ollama to be running with mxbai-embed-large model.
 """
-import pytest
 from pathlib import Path
 
+import pytest
+
+from backend.app.services.document_processor import get_document_processor
 from backend.app.services.embedding_service import get_embedding_service
 from backend.app.services.vector_store import get_vector_store
-from backend.app.services.document_processor import get_document_processor
-from backend.app.core.exceptions import EmbeddingError
 
 
 @pytest.fixture
@@ -24,13 +24,13 @@ def vector_store_test():
     # Clear any existing test data
     try:
         store.clear_collection()
-    except:
+    except Exception:
         pass
     yield store
     # Cleanup after test
     try:
         store.clear_collection()
-    except:
+    except Exception:
         pass
 
 
@@ -53,14 +53,14 @@ async def test_embedding_service_health_check(embedding_service):
 async def test_generate_single_embedding(embedding_service):
     """Test generating a single embedding."""
     text = "Software engineering internship with Python and React"
-    
+
     embedding = await embedding_service.generate_embedding(text)
-    
+
     # Verify embedding properties
     assert isinstance(embedding, list)
     assert len(embedding) > 0
     assert all(isinstance(x, float) for x in embedding)
-    
+
     # mxbai-embed-large produces 1024-dimensional embeddings
     assert len(embedding) == 1024
 
@@ -74,9 +74,9 @@ async def test_generate_multiple_embeddings(embedding_service):
         "Data science position",
         "Full-stack developer role"
     ]
-    
+
     embeddings = await embedding_service.generate_embeddings_batch(texts)
-    
+
     assert len(embeddings) == len(texts)
     assert all(len(emb) == 1024 for emb in embeddings)
 
@@ -87,10 +87,10 @@ async def test_embeddings_are_different(embedding_service):
     """Test that different texts produce different embeddings."""
     text1 = "Python programming"
     text2 = "JavaScript development"
-    
+
     emb1 = await embedding_service.generate_embedding(text1)
     emb2 = await embedding_service.generate_embedding(text2)
-    
+
     # Embeddings should be different
     assert emb1 != emb2
 
@@ -100,10 +100,10 @@ async def test_embeddings_are_different(embedding_service):
 async def test_embeddings_are_consistent(embedding_service):
     """Test that same text produces same embedding."""
     text = "Consistent test text"
-    
+
     emb1 = await embedding_service.generate_embedding(text)
     emb2 = await embedding_service.generate_embedding(text)
-    
+
     # Should be identical
     assert emb1 == emb2
 
@@ -126,26 +126,26 @@ async def test_full_document_pipeline(
     # Process document
     processor = get_document_processor()
     processed_doc = processor.process_pdf(sample_pdf_path)
-    
+
     assert processed_doc.total_chunks > 0
-    
+
     # Generate embeddings
     texts = [chunk.content for chunk in processed_doc.chunks]
     embeddings = await embedding_service.generate_embeddings_batch(texts, batch_size=5)
-    
+
     assert len(embeddings) == len(processed_doc.chunks)
-    
+
     # Store in vector database
     vector_store_test.add_documents(
         processed_doc.chunks,
         embeddings,
         processed_doc.document_id
     )
-    
+
     # Verify storage
     count = vector_store_test.get_document_count()
     assert count == processed_doc.total_chunks
-    
+
     # Verify we can retrieve stats
     stats = vector_store_test.get_stats()
     assert stats["total_chunks"] == processed_doc.total_chunks
@@ -163,26 +163,26 @@ async def test_similarity_search_with_real_data(
     # Setup: Process and store document
     processor = get_document_processor()
     processed_doc = processor.process_pdf(sample_pdf_path)
-    
+
     texts = [chunk.content for chunk in processed_doc.chunks]
     embeddings = await embedding_service.generate_embeddings_batch(texts, batch_size=5)
-    
+
     vector_store_test.add_documents(
         processed_doc.chunks,
         embeddings,
         processed_doc.document_id
     )
-    
+
     # Perform similarity search
     query_text = "What are the requirements for the internship?"
     query_embedding = await embedding_service.generate_embedding(query_text)
-    
+
     results = vector_store_test.similarity_search(query_embedding, top_k=3)
-    
+
     # Verify results
     assert len(results) > 0
     assert len(results) <= 3
-    
+
     # Results should have required fields
     for result in results:
         assert "id" in result
@@ -203,22 +203,22 @@ async def test_search_relevance(
     # Setup
     processor = get_document_processor()
     processed_doc = processor.process_pdf(sample_pdf_path)
-    
+
     texts = [chunk.content for chunk in processed_doc.chunks]
     embeddings = await embedding_service.generate_embeddings_batch(texts, batch_size=5)
-    
+
     vector_store_test.add_documents(
         processed_doc.chunks,
         embeddings,
         processed_doc.document_id
     )
-    
+
     # Search for specific topic
     query_text = "Python programming skills"
     query_embedding = await embedding_service.generate_embedding(query_text)
-    
+
     results = vector_store_test.similarity_search(query_embedding, top_k=3)
-    
+
     # Results should mention Python (or related content)
     # Note: This is a heuristic check
     assert len(results) > 0
@@ -235,24 +235,24 @@ async def test_delete_document_from_vector_store(
     # Setup: Add document
     processor = get_document_processor()
     processed_doc = processor.process_pdf(sample_pdf_path)
-    
+
     texts = [chunk.content for chunk in processed_doc.chunks]
     embeddings = await embedding_service.generate_embeddings_batch(texts, batch_size=5)
-    
+
     vector_store_test.add_documents(
         processed_doc.chunks,
         embeddings,
         processed_doc.document_id
     )
-    
+
     initial_count = vector_store_test.get_document_count()
     assert initial_count > 0
-    
+
     # Delete document
     deleted = vector_store_test.delete_document(processed_doc.document_id)
-    
+
     assert deleted == processed_doc.total_chunks
-    
+
     # Verify deletion
     final_count = vector_store_test.get_document_count()
     assert final_count == 0
@@ -267,7 +267,7 @@ async def test_multiple_documents_in_store(
 ):
     """Test storing and managing multiple documents."""
     processor = get_document_processor()
-    
+
     # Add first document
     doc1 = processor.process_pdf(
         sample_pdf_path,
@@ -276,7 +276,7 @@ async def test_multiple_documents_in_store(
     texts1 = [chunk.content for chunk in doc1.chunks]
     emb1 = await embedding_service.generate_embeddings_batch(texts1, batch_size=5)
     vector_store_test.add_documents(doc1.chunks, emb1, doc1.document_id)
-    
+
     # Add second document (same file, different ID)
     doc2 = processor.process_pdf(
         sample_pdf_path,
@@ -285,15 +285,15 @@ async def test_multiple_documents_in_store(
     texts2 = [chunk.content for chunk in doc2.chunks]
     emb2 = await embedding_service.generate_embeddings_batch(texts2, batch_size=5)
     vector_store_test.add_documents(doc2.chunks, emb2, doc2.document_id)
-    
+
     # Verify both are stored
     stats = vector_store_test.get_stats()
     assert stats["unique_documents"] == 2
     assert stats["total_chunks"] == doc1.total_chunks + doc2.total_chunks
-    
+
     # Delete first document
     vector_store_test.delete_document(doc1.document_id)
-    
+
     # Verify only second remains
     stats_after = vector_store_test.get_stats()
     assert stats_after["unique_documents"] == 1

@@ -142,9 +142,9 @@ tests/
 
 ## Known limitations
 
-- **In-memory document metadata**: restart loses the document registry (vectors persist in ChromaDB, but the UI's document list goes empty). Tracked for the SQLite migration in Phase B.
 - **No authentication**: anyone reaching the API can upload, query, or delete. Add an API-key gate before exposing the service.
-- **Outdated pinned deps**: `chromadb 0.4.22`, `langchain-text-splitters 0.0.1`, `ollama 0.1.6`, `fastapi 0.104.1` — upgrade planned in Phase B.
+- **In-process services**: the FastAPI app holds singletons for the RAG pipeline, embedding service, and vector store. Concurrent WebSocket clients share these, which can cause head-of-line stalls. Per-request pooling is in Phase C.
+- **Pydantic v2 class-config warnings**: a few models in `backend/app/models/document.py` still use the old `class Config:` form. Cosmetic — fix by migrating to `model_config = ConfigDict(...)` whenever they're next touched.
 
 ## Roadmap
 

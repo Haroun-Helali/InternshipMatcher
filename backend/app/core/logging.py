@@ -8,15 +8,15 @@ from backend.app.core.config import get_settings
 
 def setup_logging() -> None:
     """Configure application logging.
-    
+
     Sets up structured logging with appropriate levels and formats.
     """
     settings = get_settings()
-    
+
     # Create logs directory if it doesn't exist
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-    
+
     # Configure root logger
     logging.basicConfig(
         level=getattr(logging, settings.log_level.upper()),
@@ -28,7 +28,7 @@ def setup_logging() -> None:
             logging.FileHandler(log_dir / "app.log"),
         ],
     )
-    
+
     # Set third-party loggers to WARNING to reduce noise
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("chromadb").setLevel(logging.WARNING)
@@ -37,10 +37,10 @@ def setup_logging() -> None:
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for a module.
-    
+
     Args:
         name: Name of the logger (typically __name__)
-        
+
     Returns:
         Configured logger instance
     """
