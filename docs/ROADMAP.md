@@ -30,11 +30,11 @@ Definition of done: a backend restart no longer wipes the document list; a malfo
 
 Make it deployable and pleasant to use.
 
-- **API key auth**. `X-API-Key` header middleware. One key in `.env` for dev, rotation via env var swap. Block unauthenticated requests at every router except `/health`.
-- **Docker**. `Dockerfile` (multi-stage: builder + runtime) for the backend, `Dockerfile` for the frontend, `docker-compose.yml` covering backend + frontend + ollama + a chroma volume. `docker-compose up` should be the new quick-start.
-- **Per-connection RAG pipeline**. Refactor the module-singleton workaround at [query.py:184](../backend/app/api/query.py#L184) so concurrent WebSocket clients don't share state. Either instantiate per-request or use a connection pool.
-- **Frontend polish**: real loading states during embedding, error toasts on failed uploads/queries, mobile breakpoint (sidebars collapse to drawer), WebSocket auto-reconnect.
-- **Structured logging**. Switch to `structlog` or stdlib logging with JSON formatter. Add a request-ID middleware. Log Ollama call latency.
+- [x] **API key auth**. `X-API-Key` header middleware (or `?api_key=` for WebSocket handshakes) gated on `API_KEY` in `.env`. Empty value disables auth for dev; `/health`, `/files/*` and the FastAPI docs paths stay open. Lives in [backend/app/core/auth.py](../backend/app/core/auth.py).
+- [x] **Docker**. Multi-stage [backend/Dockerfile](../backend/Dockerfile) (wheel-builder + slim runtime, non-root user, healthcheck) and [frontend/Dockerfile](../frontend/Dockerfile) (deps → build → standalone runtime). [docker-compose.yml](../docker-compose.yml) wires ollama + backend + frontend with named volumes for chroma/uploads/sqlite. `docker-compose up` is the new quick-start.
+- [x] **Per-connection RAG pipeline**. `query_stream` now yields discriminated `{"type": "sources" | "token"}` events instead of relying on a shared `last_retrieved_sources` attribute, so concurrent WebSocket clients can't race on pipeline state. CLI and WS handler both updated to the event shape.
+- [x] **Frontend polish**: per-document status polling against `/documents/{id}/status` (replaces optimistic "embedded" flip), global toast system in [frontend/contexts/ToastContext.tsx](../frontend/contexts/ToastContext.tsx) for upload/query errors and successes, both sidebars collapse to overlay drawers below the `md` breakpoint with a hamburger + briefcase in the header, and WebSocket connections retry up to twice with exponential backoff if they drop before the first chunk.
+- [x] **Structured logging**. Stdlib logging with an optional JSON formatter (`LOG_FORMAT=json`), a contextvar-backed `RequestIDMiddleware` that propagates `X-Request-ID` end-to-end, and Ollama latency emitted from both the generate and embeddings paths as `latency_ms` extras.
 
 Definition of done: `docker-compose up` brings the whole stack live with one command; an unauthenticated request returns 401; the UI is usable on a phone.
 

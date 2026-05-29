@@ -1,0 +1,57 @@
+# `docker-compose up` brings up: ollama → backend (FastAPI) → frontend (Next).
+# Chroma + uploads + SQLite live on a single named volume so document state
+# survives container recreation.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: rag_backend
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.2:latest}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-mxbai-embed-large:latest}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      API_KEY: ${API_KEY:-}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    volumes:
+      - rag_data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    container_name: rag_frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  rag_data:

@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     rate_limit_per_minute: int = 10
 
+    # Auth. When `api_key` is non-empty, all requests outside the open paths
+    # must include `X-API-Key: <key>` (or `?api_key=<key>` for WebSockets).
+    # Leave blank in dev to disable auth entirely.
+    api_key: str = ""
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

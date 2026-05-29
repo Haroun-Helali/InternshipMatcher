@@ -10,6 +10,7 @@ This module orchestrates the complete RAG workflow:
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -78,9 +79,6 @@ class RAGPipeline:
 
         # Conversation history (session_id -> turns)
         self.conversations: Dict[str, List[ConversationTurn]] = {}
-
-        # Store last retrieved sources for access after streaming
-        self.last_retrieved_sources: List[Dict] = []
 
         logger.info(
             "RAG Pipeline initialized",
@@ -213,26 +211,21 @@ class RAGPipeline:
         top_k: Optional[int] = None,
         session_id: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[str]:
-        """
-        Execute RAG query with streaming response.
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Execute the RAG query and stream discriminated events.
 
-        Args:
-            question: User's question
-            top_k: Number of top results to retrieve
-            session_id: Session ID for conversation history
-            filters: Metadata filters for vector search
+        Events:
+            - {"type": "sources", "sources": [...]} — emitted exactly once
+              before any tokens, even if the list is empty.
+            - {"type": "token", "content": str} — generated text tokens.
 
-        Yields:
-            Response tokens as they're generated
-
-        Raises:
-            RAGPipelineError: If pipeline execution fails
+        Returning events instead of bare strings lets the caller carry the
+        sources alongside the stream without the pipeline holding per-request
+        state on a shared singleton (which raced under concurrent WS clients).
         """
         try:
             logger.info(f"RAG streaming query started: {question[:100]}...")
 
-            # Generate embedding and retrieve context (same as regular query)
             query_embedding = await self.embedding_service.generate_embedding(question)
             top_k = top_k or self.settings.rag_top_k_results
 
@@ -240,11 +233,23 @@ class RAGPipeline:
                 query_embedding=query_embedding, top_k=top_k, filter_metadata=filters
             )
 
-            # Store sources for later retrieval
-            self.last_retrieved_sources = results
+            sources_payload = [
+                {
+                    "document_id": r["metadata"].get("document_id", "unknown"),
+                    "filename": r["metadata"].get("filename", "unknown"),
+                    "chunk_index": r["metadata"].get("chunk_index", 0),
+                    "content": r["content"],
+                    "similarity_score": 1.0 - r.get("distance", 0.0),
+                }
+                for r in results
+            ]
+            yield {"type": "sources", "sources": sources_payload}
 
             if not results:
-                yield self.prompt_templates.build_no_context_prompt(question)
+                yield {
+                    "type": "token",
+                    "content": self.prompt_templates.build_no_context_prompt(question),
+                }
                 return
 
             chunks = [
@@ -274,13 +279,11 @@ class RAGPipeline:
                     question=question, context=context
                 )
 
-            # Stream response
             full_answer = ""
             async for token in self._generate_response_stream(prompt):
                 full_answer += token
-                yield token
+                yield {"type": "token", "content": token}
 
-            # Store conversation turn
             if session_id:
                 if session_id not in self.conversations:
                     self.conversations[session_id] = []
@@ -320,10 +323,20 @@ class RAGPipeline:
                 },
             }
 
+            started = time.perf_counter()
             response = await self.http_client.post("/api/generate", json=payload)
             response.raise_for_status()
-
             data = response.json()
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            logger.info(
+                "ollama generate completed",
+                extra={
+                    "ollama_call": "generate",
+                    "ollama_model": self.settings.ollama_llm_model,
+                    "latency_ms": round(elapsed_ms, 1),
+                    "eval_count": data.get("eval_count"),
+                },
+            )
             answer = data.get("response", "")
 
             if not answer:
@@ -366,6 +379,8 @@ class RAGPipeline:
                 },
             }
 
+            started = time.perf_counter()
+            tokens_yielded = 0
             async with self.http_client.stream(
                 "POST", "/api/generate", json=payload
             ) as response:
@@ -377,7 +392,18 @@ class RAGPipeline:
 
                         data = json.loads(line)
                         if "response" in data:
+                            tokens_yielded += 1
                             yield data["response"]
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            logger.info(
+                "ollama generate (stream) completed",
+                extra={
+                    "ollama_call": "generate_stream",
+                    "ollama_model": self.settings.ollama_llm_model,
+                    "latency_ms": round(elapsed_ms, 1),
+                    "tokens": tokens_yielded,
+                },
+            )
 
         except httpx.HTTPError as e:
             raise RAGPipelineError(

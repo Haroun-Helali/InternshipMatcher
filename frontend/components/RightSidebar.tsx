@@ -13,7 +13,7 @@ export default function RightSidebar() {
     return (
       <button
         onClick={toggleRightSidebar}
-        className="fixed right-0 top-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 border-l border-y border-gray-200 dark:border-gray-700 p-2 rounded-l-lg shadow-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        className="hidden md:flex fixed right-0 top-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 border-l border-y border-gray-200 dark:border-gray-700 p-2 rounded-l-lg shadow-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         aria-label="Open sidebar"
       >
         <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400 rotate-180" />
@@ -22,7 +22,17 @@ export default function RightSidebar() {
   }
 
   return (
-    <div className="w-96 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col">
+    <>
+    <div
+      onClick={toggleRightSidebar}
+      className="md:hidden fixed inset-0 z-30 bg-black/40"
+      aria-hidden="true"
+    />
+    <div className="
+      fixed inset-y-0 right-0 z-40 w-full max-w-sm
+      md:static md:w-96 md:max-w-none
+      bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col
+    ">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <div>
@@ -218,5 +228,6 @@ export default function RightSidebar() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -1,0 +1,35 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Frontend
+frontend/node_modules
+frontend/.next
+frontend/.turbo
+
+# Local data — never bake into image
+chroma_data
+uploads
+temp_files
+logs
+documents.sqlite
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+
+# Tests / docs
+tests/__pycache__
+docs/
+*.md
+!README.md

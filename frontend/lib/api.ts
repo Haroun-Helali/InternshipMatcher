@@ -61,6 +61,16 @@ export interface ErrorResponse {
   detail: string;
 }
 
+export type DocumentLifecycleState = 'pending' | 'processing' | 'ready' | 'failed';
+
+export interface DocumentStatusResponse {
+  document_id: string;
+  state: DocumentLifecycleState;
+  chunks_indexed: number;
+  error: string | null;
+  filename: string;
+}
+
 /**
  * Document Management API
  */
@@ -117,6 +127,22 @@ export const documentsApi = {
   },
 
   /**
+   * Get current lifecycle state for an uploaded document.
+   */
+  async getStatus(documentId: string): Promise<DocumentStatusResponse> {
+    const response = await fetch(`${API_BASE_URL}/documents/${documentId}/status`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      const error: ErrorResponse = await response.json();
+      throw new Error(error.detail || 'Failed to fetch document status');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Get knowledge base statistics
    */
   async getStats(): Promise<DocumentStatsResponse> {
@@ -163,6 +189,12 @@ export const queryApi = {
    * Server emits, in order: `chunk` (many), `sources`, `matches`, `done`.
    * The `matches` event carries the parsed match list plus a `cleaned_answer`
    * with the JSON code-fence stripped — use that as the final message text.
+   *
+   * Auto-reconnect: if the socket fails to open or closes before any chunk
+   * arrives, the call retries up to MAX_RETRIES times with exponential
+   * backoff. Once data starts streaming we don't retry (would dupe output).
+   * Returns a handle whose `close()` cancels both the active socket and any
+   * pending retry timer.
    */
   createStreamConnection(
     question: string,
@@ -171,48 +203,73 @@ export const queryApi = {
     onComplete: (sources: SourceReference[]) => void,
     onError: (error: string) => void,
     onMatches?: (matches: Match[], cleanedAnswer: string) => void,
-  ): WebSocket {
+    onRetry?: (attempt: number) => void,
+  ): { close: () => void } {
+    const MAX_RETRIES = 2;
     const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
-    const ws = new WebSocket(`${wsUrl}/query/stream`);
+    let activeWs: WebSocket | null = null;
+    let retryTimer: number | null = null;
+    let cancelled = false;
+    let attempt = 0;
 
-    ws.onopen = () => {
-      const request = {
-        question,
-        session_id: sessionId,
-        include_sources: true,
+    const open = () => {
+      if (cancelled) return;
+      let receivedData = false;
+      const ws = new WebSocket(`${wsUrl}/query/stream`);
+      activeWs = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ question, session_id: sessionId, include_sources: true }));
       };
-      ws.send(JSON.stringify(request));
-    };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        if (data.type === 'chunk') {
-          onChunk(data.content);
-        } else if (data.type === 'sources') {
-          onComplete(data.sources);
-        } else if (data.type === 'matches') {
-          onMatches?.(data.matches || [], data.cleaned_answer ?? '');
-        } else if (data.type === 'error') {
-          onError(data.message);
-          ws.close();
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'chunk') {
+            receivedData = true;
+            onChunk(data.content);
+          } else if (data.type === 'sources') {
+            receivedData = true;
+            onComplete(data.sources);
+          } else if (data.type === 'matches') {
+            receivedData = true;
+            onMatches?.(data.matches || [], data.cleaned_answer ?? '');
+          } else if (data.type === 'error') {
+            onError(data.message);
+            ws.close();
+          }
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
         }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        // ws.onclose will handle the retry decision.
+      };
+
+      ws.onclose = () => {
+        if (cancelled) return;
+        if (!receivedData && attempt < MAX_RETRIES) {
+          attempt += 1;
+          onRetry?.(attempt);
+          const delayMs = 400 * Math.pow(2, attempt - 1); // 400, 800
+          retryTimer = window.setTimeout(open, delayMs);
+        } else if (!receivedData) {
+          onError('Connection failed. Please check that the backend is running.');
+        }
+      };
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      onError('Connection error occurred');
-    };
+    open();
 
-    ws.onclose = () => {
-      console.log('WebSocket connection closed');
+    return {
+      close: () => {
+        cancelled = true;
+        if (retryTimer !== null) window.clearTimeout(retryTimer);
+        activeWs?.close();
+      },
     };
-
-    return ws;
   },
 
   /**

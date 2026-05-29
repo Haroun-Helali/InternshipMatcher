@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.core import get_logger, get_settings, setup_logging
+from backend.app.core.auth import install_api_key_middleware
+from backend.app.core.request_id import RequestIDMiddleware
 
 # Setup logging first
 setup_logging()
@@ -52,6 +54,16 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Request-ID propagation runs first so auth/log emissions carry the id.
+    app.add_middleware(RequestIDMiddleware)
+
+    # API key auth — no-op when settings.api_key is empty.
+    install_api_key_middleware(app, settings)
+    if settings.api_key:
+        logger.info("API key auth enabled")
+    else:
+        logger.warning("API key auth DISABLED (set API_KEY to enable)")
 
     # Health check endpoint
     @app.get("/health")

@@ -6,7 +6,7 @@ import RightSidebar from '@/components/RightSidebar';
 export default function Home() {
   return (
     <MainLayout>
-      <div className="flex h-[calc(100vh-73px)]">
+      <div className="relative flex h-[calc(100vh-73px)] overflow-hidden">
         <LeftSidebar />
         <CenterChat />
         <RightSidebar />

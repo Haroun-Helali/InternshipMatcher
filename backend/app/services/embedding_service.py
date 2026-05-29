@@ -57,6 +57,8 @@ class EmbeddingService:
             )
 
         try:
+            import time as _time
+            started = _time.perf_counter()
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     f"{self.base_url}/api/embeddings",
@@ -84,7 +86,15 @@ class EmbeddingService:
                         details={"response": data}
                     )
 
-                logger.debug(f"Generated embedding with dimension {len(embedding)}")
+                logger.info(
+                    "ollama embeddings completed",
+                    extra={
+                        "ollama_call": "embeddings",
+                        "ollama_model": self.model,
+                        "latency_ms": round((_time.perf_counter() - started) * 1000, 1),
+                        "dim": len(embedding),
+                    },
+                )
                 return embedding
 
         except httpx.TimeoutException as e:

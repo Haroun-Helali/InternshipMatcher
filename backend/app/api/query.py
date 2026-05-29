@@ -6,6 +6,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
+from backend.app.core.auth import verify_websocket_api_key
+from backend.app.core.config import get_settings
 from backend.app.core.exceptions import RAGPipelineError
 from backend.app.models.api import (
     ConversationHistoryResponse,
@@ -84,112 +86,76 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
         ) from e
 
 
+async def _run_streaming_query(websocket: WebSocket, data: dict) -> None:
+    """Handle a single client question on the open websocket."""
+    question = data.get("question")
+    if not question:
+        await websocket.send_json({"error": "Missing required field: question"})
+        return
+
+    session_id = data.get("session_id")
+    logger.info(f"Streaming query: {question[:100]}...")
+
+    try:
+        await websocket.send_json({"type": "start", "session_id": session_id})
+
+        full_answer = ""
+        async for event in rag_pipeline.query_stream(
+            question=question,
+            top_k=data.get("top_k", 5),
+            session_id=session_id,
+            filters=data.get("filters"),
+        ):
+            if event["type"] == "sources":
+                await websocket.send_json(
+                    {"type": "sources", "sources": event["sources"]}
+                )
+            elif event["type"] == "token":
+                full_answer += event["content"]
+                await websocket.send_json(
+                    {"type": "chunk", "content": event["content"]}
+                )
+
+        # Lifts the structured match block out of the streamed text so the
+        # frontend never has to re-parse it.
+        cleaned_answer, matches = extract_matches(full_answer)
+        await websocket.send_json(
+            {
+                "type": "matches",
+                "cleaned_answer": cleaned_answer,
+                "matches": [m.model_dump() for m in matches],
+            }
+        )
+        await websocket.send_json({"type": "done"})
+
+    except RAGPipelineError as e:
+        logger.error(f"RAG pipeline error: {e}", exc_info=True)
+        await websocket.send_json({"type": "error", "message": str(e)})
+    except Exception:
+        logger.exception("Streaming error")
+        await websocket.send_json(
+            {"type": "error", "message": "An unexpected error occurred"}
+        )
+
+
 @router.websocket("/stream")
 async def query_stream(websocket: WebSocket):
-    """
-    WebSocket endpoint for streaming RAG responses.
+    """WebSocket endpoint for streaming RAG responses.
 
     Client sends JSON: {"question": "...", "top_k": 5, "session_id": "..."}
     Server streams tokens as they're generated.
     """
+    if not verify_websocket_api_key(websocket, get_settings()):
+        await websocket.close(code=4401)
+        logger.warning("WebSocket auth rejected")
+        return
     await websocket.accept()
     logger.info("WebSocket connection established")
 
     try:
         while True:
-            # Receive query from client
             data = await websocket.receive_json()
-
-            question = data.get("question")
-            if not question:
-                await websocket.send_json({
-                    "error": "Missing required field: question"
-                })
-                continue
-
-            top_k = data.get("top_k", 5)
-            session_id = data.get("session_id")
-            filters = data.get("filters")
-
-            logger.info(f"Streaming query: {question[:100]}...")
-
-            try:
-                # Send start signal
-                await websocket.send_json({
-                    "type": "start",
-                    "session_id": session_id
-                })
-
-                # Collect sources while streaming
-                sources = []
-                full_answer = ""
-
-                # Stream response tokens
-                async for token in rag_pipeline.query_stream(
-                    question=question,
-                    top_k=top_k,
-                    session_id=session_id,
-                    filters=filters
-                ):
-                    full_answer += token
-                    await websocket.send_json({
-                        "type": "chunk",  # Changed from "token" to "chunk"
-                        "content": token
-                    })
-
-                # Get sources from the last query
-                try:
-                    # Retrieve sources from RAG pipeline (already fetched during streaming)
-                    results = rag_pipeline.last_retrieved_sources
-
-                    sources = [
-                        {
-                            "document_id": result["metadata"].get("document_id", "unknown"),
-                            "filename": result["metadata"].get("filename", "unknown"),
-                            "chunk_index": result["metadata"].get("chunk_index", 0),
-                            "content": result["content"],
-                            "similarity_score": 1.0 - result.get("distance", 0.0)  # Convert distance to similarity
-                        }
-                        for result in results
-                    ]
-                except Exception as e:
-                    logger.error(f"Failed to retrieve sources: {e}")
-                    sources = []
-
-                # Send sources
-                await websocket.send_json({
-                    "type": "sources",
-                    "sources": sources
-                })
-
-                # Parse the structured matches block out of the full answer
-                # and ship it so the frontend doesn't need to re-parse the
-                # streamed text. `cleaned_answer` is the visible message with
-                # the JSON code-fence removed.
-                cleaned_answer, matches = extract_matches(full_answer)
-                await websocket.send_json({
-                    "type": "matches",
-                    "cleaned_answer": cleaned_answer,
-                    "matches": [m.model_dump() for m in matches],
-                })
-
-                # Send completion signal
-                await websocket.send_json({
-                    "type": "done"
-                })
-
-            except RAGPipelineError as e:
-                logger.error(f"RAG pipeline error: {e}", exc_info=True)
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(e)  # Changed from "error" to "message"
-                })
-            except Exception as e:
-                logger.error(f"Streaming error: {e}", exc_info=True)
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "An unexpected error occurred"  # Changed from "error" to "message"
-                })
+            await _run_streaming_query(websocket, data)
 
     except WebSocketDisconnect:
         logger.info("WebSocket connection closed")

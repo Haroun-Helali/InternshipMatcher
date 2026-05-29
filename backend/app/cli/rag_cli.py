@@ -142,12 +142,12 @@ async def interactive_query_mode(rag_pipeline):  # noqa: C901
             print("\n🤖 Assistant: ", end="", flush=True)
 
             if streaming_mode:
-                # Streaming mode
-                async for token in rag_pipeline.query_stream(
+                async for event in rag_pipeline.query_stream(
                     question=question, session_id=session_id
                 ):
-                    print(token, end="", flush=True)
-                print()  # New line after streaming
+                    if event["type"] == "token":
+                        print(event["content"], end="", flush=True)
+                print()
             else:
                 # Regular mode
                 response = await rag_pipeline.query(
@@ -184,10 +184,10 @@ async def single_query_mode(rag_pipeline, question: str, streaming: bool = False
 
     try:
         if streaming:
-            # Streaming mode
-            async for token in rag_pipeline.query_stream(question=question):
-                print(token, end="", flush=True)
-            print()  # New line
+            async for event in rag_pipeline.query_stream(question=question):
+                if event["type"] == "token":
+                    print(event["content"], end="", flush=True)
+            print()
         else:
             # Regular mode
             response = await rag_pipeline.query(question=question)

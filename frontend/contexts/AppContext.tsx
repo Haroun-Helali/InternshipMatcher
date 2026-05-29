@@ -75,6 +75,9 @@ interface AppContextType {
   toggleDarkMode: () => void;
   rightSidebarOpen: boolean;
   toggleRightSidebar: () => void;
+  mobileLeftOpen: boolean;
+  toggleMobileLeft: () => void;
+  closeMobileLeft: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -85,7 +88,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
   const [darkMode, setDarkMode] = useState(false);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return window.matchMedia('(min-width: 768px)').matches;
+  });
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string>(() => {
     // Generate initial session ID
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -131,6 +138,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRightSidebarOpen((prev) => !prev);
   };
 
+  const toggleMobileLeft = () => setMobileLeftOpen((prev) => !prev);
+  const closeMobileLeft = () => setMobileLeftOpen(false);
+
   return (
     <AppContext.Provider
       value={{
@@ -152,6 +162,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toggleDarkMode,
         rightSidebarOpen,
         toggleRightSidebar,
+        mobileLeftOpen,
+        toggleMobileLeft,
+        closeMobileLeft,
       }}
     >
       {children}

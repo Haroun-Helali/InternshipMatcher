@@ -2,17 +2,19 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
+import { useToast } from '@/contexts/ToastContext';
 import { Send, User, Bot, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { queryApi, type Match as ApiMatch, type SourceReference } from '@/lib/api';
 
 export default function CenterChat() {
   const { messages, addMessage, updateMessage, sessionId, darkMode, setMatches } = useApp();
+  const { toast } = useToast();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentStreamingId, setCurrentStreamingId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<{ close: () => void } | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -98,6 +100,7 @@ export default function CenterChat() {
           updateMessage(assistantId, {
             content: `Error: ${error}`,
           });
+          toast('error', error);
           setIsLoading(false);
           setCurrentStreamingId(null);
         },
@@ -127,12 +130,18 @@ export default function CenterChat() {
           setIsLoading(false);
           setCurrentStreamingId(null);
         },
+        // On retry — backoff is happening transparently in the WS layer.
+        (attempt: number) => {
+          toast('info', `Reconnecting to backend (attempt ${attempt})…`);
+        },
       );
     } catch (error) {
       console.error('Failed to send query:', error);
+      const message = error instanceof Error ? error.message : 'Failed to process your query.';
       updateMessage(assistantId, {
-        content: `Error: Failed to process your query. Please make sure the backend is running.`,
+        content: `Error: ${message}`,
       });
+      toast('error', message);
       setIsLoading(false);
       setCurrentStreamingId(null);
     }
